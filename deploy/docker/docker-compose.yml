@@ -1,0 +1,151 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: reserveflow
+      POSTGRES_USER: reserveflow
+      POSTGRES_PASSWORD: reserveflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reserveflow -d reserveflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [reserveflow]
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [reserveflow]
+
+  kafka:
+    image: redpandadata/redpanda:v24.2.9
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://kafka:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+    volumes:
+      - kafka-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [reserveflow]
+
+  backend-api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: ["/app/backend-api"]
+    environment:
+      APP_ENV: local
+      HTTP_PORT: 8080
+      DATABASE_URL: postgres://reserveflow:reserveflow@postgres:5432/reserveflow?sslmode=disable
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      KAFKA_BROKERS: kafka:9092
+      JWT_ACCESS_SECRET: change-me-access
+      JWT_REFRESH_SECRET: change-me-refresh
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 720h
+      HOLD_TTL: 10m
+      SEATMAP_CACHE_TTL: 30s
+      LOG_LEVEL: debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [reserveflow]
+
+  backend-worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: ["/app/backend-worker"]
+    environment:
+      APP_ENV: local
+      HTTP_PORT: 8081
+      DATABASE_URL: postgres://reserveflow:reserveflow@postgres:5432/reserveflow?sslmode=disable
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      KAFKA_BROKERS: kafka:9092
+      JWT_ACCESS_SECRET: change-me-access
+      JWT_REFRESH_SECRET: change-me-refresh
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 720h
+      HOLD_TTL: 10m
+      SEATMAP_CACHE_TTL: 30s
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [reserveflow]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    networks: [reserveflow]
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks: [reserveflow]
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  grafana-data:
+
+networks:
+  reserveflow:
+    driver: bridge

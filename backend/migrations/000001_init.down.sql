@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS processed_events;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS booking_items;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS session_seats;
+DROP TABLE IF EXISTS seats;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS halls;
+DROP TABLE IF EXISTS venues;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS users;

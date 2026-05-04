@@ -1,0 +1,14 @@
+### Login demo user
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "password": "Password123!"
+}
+
+### Events
+GET http://localhost:8080/api/v1/events
+
+### Seat map
+GET http://localhost:8080/api/v1/sessions/50000000-0000-0000-0000-000000000001/seats

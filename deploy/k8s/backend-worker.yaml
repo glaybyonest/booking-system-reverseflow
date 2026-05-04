@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-worker
+  namespace: reserveflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-worker
+  template:
+    metadata:
+      labels:
+        app: backend-worker
+    spec:
+      containers:
+        - name: backend-worker
+          image: reserveflow-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/backend-worker"]
+          envFrom:
+            - configMapRef:
+                name: reserveflow-config
+            - secretRef:
+                name: reserveflow-secret
+          readinessProbe:
+            exec:
+              command: ["true"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            exec:
+              command: ["true"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
