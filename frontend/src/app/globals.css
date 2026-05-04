@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: #f8f9fa;
+}
+
+body {
+  min-height: 100vh;
+  background: #f8f9fa;
+  color: #111827;
+}
+
+::selection {
+  background: #111827;
+  color: white;
+}
+
+.seat-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.seat-scroll::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 999px;
+}
+
+.seat-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}

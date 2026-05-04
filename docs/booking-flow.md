@@ -1,13 +1,13 @@
 # Booking Flow
 
-## Hold Flow
+## Сценарий удержания места (Hold)
 
 `POST /api/v1/bookings/hold`
 
-1. The API gets `userId` from JWT claims.
-2. The application validates `sessionId` and `seatId`.
-3. PostgreSQL transaction starts.
-4. Repository runs:
+1. API получает `userId` из JWT.
+2. Приложение валидирует `sessionId` и `seatId`.
+3. Открывается транзакция PostgreSQL.
+4. Репозиторий выполняет блокирующий запрос:
 
 ```sql
 SELECT *
@@ -16,48 +16,48 @@ WHERE session_id = $1 AND seat_id = $2
 FOR UPDATE;
 ```
 
-5. If the row is not `available`, the request returns `409 SEAT_NOT_AVAILABLE`.
-6. Booking expiration is calculated as `now + HOLD_TTL`.
-7. `session_seats` becomes `held`.
-8. A `pending` booking and `held` booking item are inserted.
-9. `seat.held` and `booking.created` are written to `outbox_events`.
-10. Transaction commits.
-11. Redis hold key is written with TTL.
-12. Seat map cache is invalidated.
+5. Если место не `available`, возвращается `409 SEAT_NOT_AVAILABLE`.
+6. Рассчитывается срок удержания: `now + HOLD_TTL`.
+7. В `session_seats` статус меняется на `held`.
+8. Создаётся `pending` бронь и `held` booking item.
+9. В `outbox_events` записываются `seat.held` и `booking.created`.
+10. Транзакция фиксируется.
+11. В Redis сохраняется hold key с TTL.
+12. Кэш карты мест инвалидируется.
 
-Only one concurrent transaction can hold the same `session_seats` row. The other requests wait, see `held`, and return conflict.
+Из-за row lock только одна параллельная транзакция может удержать конкретное место; остальные получат конфликт.
 
-## Payment Success
+## Успешная оплата
 
 `POST /api/v1/payments`
 
-The payment use case locks the booking, checks ownership, verifies `pending` status and non-expired `expires_at`, then creates a mock payment.
+Use case оплаты блокирует бронь, проверяет владельца, статус `pending`, срок `expires_at` и затем создаёт mock-платёж.
 
-On success:
+При успехе:
 
-- payment becomes `succeeded`
-- booking becomes `confirmed`
-- booking item becomes `booked`
-- session seat becomes `booked`
-- hold key is removed
-- seat map cache is invalidated
-- `payment.succeeded` and `booking.confirmed` events are written
+- `payment` -> `succeeded`
+- `booking` -> `confirmed`
+- `booking_item` -> `booked`
+- `session_seat` -> `booked`
+- Redis hold key удаляется
+- кэш карты мест инвалидируется
+- пишутся события `payment.succeeded` и `booking.confirmed`
 
-## Payment Failure
+## Неуспешная оплата
 
-On forced or mock failure:
+При forced/mock failure:
 
-- payment becomes `failed`
-- booking becomes `payment_failed`
-- booking item becomes `payment_failed`
-- session seat becomes `available`
-- hold key is removed
-- seat map cache is invalidated
-- `payment.failed` event is written
+- `payment` -> `failed`
+- `booking` -> `payment_failed`
+- `booking_item` -> `payment_failed`
+- `session_seat` -> `available`
+- Redis hold key удаляется
+- кэш карты мест инвалидируется
+- пишется событие `payment.failed`
 
-## Expiration
+## Истечение удержания (Expiration)
 
-The worker runs every 15 seconds:
+Worker выполняется каждые 15 секунд:
 
 ```sql
 SELECT id
@@ -68,8 +68,14 @@ LIMIT 100
 FOR UPDATE SKIP LOCKED;
 ```
 
-For each expired booking it marks the booking and item as `expired`, releases the session seat, writes `booking.expired`, removes Redis hold key, and invalidates seat map cache.
+Для каждой истёкшей брони:
 
-The job is idempotent because it only selects `pending` expired bookings.
+- `booking` и `booking_item` переводятся в `expired`
+- место в `session_seats` освобождается
+- пишется событие `booking.expired`
+- удаляется Redis hold key
+- инвалидируется кэш карты мест
 
-The worker first collects locked booking IDs, closes the result set, and only then performs follow-up queries in the same transaction. This avoids `pgx` connection-busy errors while keeping `FOR UPDATE SKIP LOCKED` semantics.
+Задача идемпотентна, потому что выбирает только `pending` брони с истёкшим временем.
+
+Сначала worker собирает заблокированные `booking.id`, закрывает result set и только после этого выполняет follow-up запросы в той же транзакции. Это предотвращает `pgx connection busy`, сохраняя семантику `FOR UPDATE SKIP LOCKED`.

@@ -1,6 +1,6 @@
 # API
 
-All business endpoints are under `/api/v1`. All responses are JSON.
+Все бизнес-endpoint-ы находятся под `/api/v1`. Все ответы возвращаются в формате JSON.
 
 ## Health
 
@@ -8,7 +8,7 @@ All business endpoints are under `/api/v1`. All responses are JSON.
 - `GET /ready`
 - `GET /metrics`
 
-## Error Format
+## Формат ошибки
 
 ```json
 {
@@ -20,7 +20,7 @@ All business endpoints are under `/api/v1`. All responses are JSON.
 }
 ```
 
-Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `SEAT_NOT_AVAILABLE`, `BOOKING_NOT_FOUND`, `BOOKING_EXPIRED`, `BOOKING_NOT_PENDING`, `PAYMENT_ALREADY_PROCESSED`, `IDEMPOTENCY_CONFLICT`, `INTERNAL_ERROR`.
+Типовые коды: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `SEAT_NOT_AVAILABLE`, `BOOKING_NOT_FOUND`, `BOOKING_EXPIRED`, `BOOKING_NOT_PENDING`, `PAYMENT_ALREADY_PROCESSED`, `IDEMPOTENCY_CONFLICT`, `INTERNAL_ERROR`.
 
 ## Auth
 
@@ -43,7 +43,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `SEA
 }
 ```
 
-Both return user data plus `accessToken` and `refreshToken`.
+Оба endpoint-а возвращают данные пользователя и токены (`accessToken`, `refreshToken`).
 
 `POST /api/v1/auth/refresh`
 
@@ -61,20 +61,20 @@ Both return user data plus `accessToken` and `refreshToken`.
 }
 ```
 
-`GET /api/v1/auth/me` requires `Authorization: Bearer <accessToken>`.
+`GET /api/v1/auth/me` требует заголовок `Authorization: Bearer <accessToken>`.
 
-## Events
+## События
 
 - `GET /api/v1/events`
 - `GET /api/v1/events/{eventId}`
 - `GET /api/v1/events/{eventId}/sessions`
 
-## Sessions And Seats
+## Сеансы и места
 
 - `GET /api/v1/sessions/{sessionId}`
 - `GET /api/v1/sessions/{sessionId}/seats`
 
-Seat map response:
+Пример ответа карты мест:
 
 ```json
 {
@@ -99,9 +99,9 @@ Seat map response:
 }
 ```
 
-## Bookings
+## Брони
 
-All booking endpoints require auth.
+Все endpoint-ы броней требуют авторизацию.
 
 `POST /api/v1/bookings/hold`
 
@@ -112,7 +112,7 @@ All booking endpoints require auth.
 }
 ```
 
-Response:
+Пример ответа:
 
 ```json
 {
@@ -132,9 +132,9 @@ Response:
 - `GET /api/v1/bookings/me`
 - `POST /api/v1/bookings/{bookingId}/cancel`
 
-## Payments
+## Платежи
 
-All payment endpoints require auth.
+Все endpoint-ы платежей требуют авторизацию.
 
 `POST /api/v1/payments`
 
@@ -146,21 +146,21 @@ All payment endpoints require auth.
 }
 ```
 
-`forceStatus` can be `succeeded` or `failed`. If omitted, mock payment succeeds.
+`forceStatus` может быть `succeeded` или `failed`. Если поле пропущено, mock-платёж считается успешным.
 
 `GET /api/v1/payments/{paymentId}`
 
-Payment access is owner-scoped. A user cannot fetch or process another user's payment.
+Доступ к платежам ограничен владельцем: пользователь не может получить или обработать чужой платёж.
 
-Idempotency rules:
+Правила идемпотентности:
 
-- Repeating the same `idempotencyKey` for the same booking returns the existing payment.
-- Reusing the same `idempotencyKey` for another booking returns `409 IDEMPOTENCY_CONFLICT`.
-- Replaying the same `idempotencyKey` with a different `forceStatus` returns `409 IDEMPOTENCY_CONFLICT`.
+- Повтор с тем же `idempotencyKey` и тем же `bookingId` возвращает существующий платёж.
+- Использование того же `idempotencyKey` для другой брони возвращает `409 IDEMPOTENCY_CONFLICT`.
+- Повтор с другим `forceStatus` для того же ключа возвращает `409 IDEMPOTENCY_CONFLICT`.
 
-## Notifications
+## Уведомления
 
-All notification endpoints require auth.
+Все endpoint-ы уведомлений требуют авторизацию.
 
 - `GET /api/v1/notifications`
 - `POST /api/v1/notifications/{id}/read`

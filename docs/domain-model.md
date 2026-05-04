@@ -1,23 +1,23 @@
 # Domain Model
 
-## Entities
+## Сущности
 
-- `users`: registered users with bcrypt password hashes and roles.
-- `events`: public event catalog records.
-- `venues`: physical venue.
-- `halls`: rooms inside venues.
-- `sessions`: scheduled event occurrence in a hall.
-- `seats`: physical seats in a hall.
-- `session_seats`: per-session seat state.
-- `bookings`: user reservation aggregate.
-- `booking_items`: seat-level booking item. MVP supports one seat per booking.
-- `payments`: mock payment records with optional idempotency key.
-- `refresh_tokens`: hashed refresh tokens with revoke metadata.
-- `notifications`: user-visible notification history.
-- `outbox_events`: durable domain events waiting for Kafka publish.
-- `processed_events`: idempotency table for consumers.
+- `users`: зарегистрированные пользователи с bcrypt-хешем пароля и ролью
+- `events`: публичный каталог событий
+- `venues`: площадки
+- `halls`: залы внутри площадок
+- `sessions`: конкретные сеансы событий в залах
+- `seats`: физические места в зале
+- `session_seats`: состояние места в рамках конкретного сеанса
+- `bookings`: агрегат пользовательской брони
+- `booking_items`: позиции брони по местам (в MVP — одно место на бронь)
+- `payments`: записи mock-платежей с опциональным `idempotencyKey`
+- `refresh_tokens`: хешированные refresh-токены с метаданными revoke
+- `notifications`: история пользовательских уведомлений
+- `outbox_events`: гарантированно сохранённые доменные события до публикации в Kafka
+- `processed_events`: таблица идемпотентности consumers
 
-## Statuses
+## Статусы
 
 Booking:
 
@@ -59,6 +59,8 @@ Notification:
 - `payment_failed`
 - `booking_cancelled`
 
-## Why `session_seats`
+## Почему `session_seats`
 
-`seats` are physical seats in a hall. A seat can be available for one session and booked for another, so mutable availability must not live on `seats`. `session_seats` is the per-session inventory row and the row locked during hold/payment transitions.
+`seats` — это физические места, общие для зала. Одно и то же место может быть свободно в одном сеансе и занято в другом, поэтому изменяемое состояние доступности не должно храниться в `seats`.
+
+`session_seats` — это инвентарь мест на уровне конкретного сеанса и именно эта строка блокируется при hold/payment переходах.

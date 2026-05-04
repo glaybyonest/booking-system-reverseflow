@@ -1,25 +1,24 @@
 # ReserveFlow
 
-ReserveFlow is a backend-only reservation system for event seats. It exposes a JSON REST API for registration, login, event browsing, seat map lookup, temporary seat holds, mock payments, booking history, and notifications.
+ReserveFlow — полнофункциональная система бронирования мест на события. Проект включает Go backend с JSON REST API и Next.js frontend, который покрывает полный пользовательский путь: регистрация, вход, каталог событий, выбор мест, удержание, оплата, история броней и уведомления.
 
-The primary engineering goal is safe concurrent booking. PostgreSQL is the source of truth, and the hold flow uses a database transaction with `SELECT ... FOR UPDATE` on `session_seats`, so only one concurrent request can hold a seat.
+Ключевая инженерная цель — безопасное конкурентное бронирование. Источник истины — PostgreSQL: в сценарии hold используется транзакция и блокировка `SELECT ... FOR UPDATE` по `session_seats`, чтобы только один параллельный запрос мог удержать конкретное место.
 
-## Stack
+## Технологии
 
-- Go, chi HTTP router
+- Go + HTTP-роутер chi
 - PostgreSQL
-- Redis for hold TTL keys, seat map cache, payment idempotency cache, and future rate limit metadata
-- Redpanda-compatible Kafka
+- Redis (TTL hold-ключей, кэш карты мест, кэш идемпотентности платежей)
+- Kafka (совместимый с Redpanda)
 - Outbox pattern
-- Prometheus metrics
-- Structured zerolog logs
-- Docker Compose and Kubernetes manifests
+- Метрики Prometheus
+- Структурированные логи zerolog
+- Docker Compose и Kubernetes-манифесты
+- Next.js frontend с auth-прокси через HTTP-only cookie
 
-No frontend, React, Next.js, CSS, or real payment/email provider is included.
+## Архитектура
 
-## Architecture
-
-The backend is a modular monolith under `backend/internal/modules`:
+Backend реализован как модульный монолит в `backend/internal/modules`:
 
 - `auth`
 - `events`
@@ -29,14 +28,14 @@ The backend is a modular monolith under `backend/internal/modules`:
 - `payments`
 - `notifications`
 
-Each module follows layered architecture: `domain`, `application`, `transport`, and `repository`.
+Каждый модуль следует слоям: `domain`, `application`, `transport`, `repository`.
 
-The same Go codebase has two runtime modes:
+У Go-приложения два режима запуска:
 
 - `backend-api`: HTTP API
-- `backend-worker`: expiration job, outbox publisher, notification consumers
+- `backend-worker`: expire job, outbox publisher, consumers уведомлений
 
-## Quick Start
+## Быстрый старт
 
 ```sh
 cd reserveflow
@@ -45,12 +44,14 @@ make migrate-up
 make seed
 ```
 
-API is available at `http://localhost:8080`.
+После запуска:
 
-Prometheus is available at `http://localhost:9090`.
-Grafana is available at `http://localhost:3000`.
+- frontend: `http://localhost:3000`
+- backend API: `http://localhost:8080`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
 
-## Local Go Run
+## Локальный запуск backend
 
 ```sh
 cd reserveflow
@@ -59,14 +60,31 @@ make api
 make worker
 ```
 
-The local commands expect PostgreSQL, Redis, and Redpanda/Kafka to be reachable from `.env.example` values.
+Для локального запуска должны быть доступны PostgreSQL, Redis и Kafka/Redpanda из параметров `.env.example`.
 
-## Test User
+## Локальный запуск frontend
+
+```sh
+cd reserveflow/frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Схема запросов:
+
+```text
+Браузер -> Next.js (/api/auth, /api/backend) -> Go backend (/api/v1)
+```
+
+JWT хранится только в HTTP-only cookie, не в `localStorage`.
+
+## Тестовый пользователь
 
 - Email: `demo@example.com`
-- Password: `Password123!`
+- Пароль: `Password123!`
 
-## Main Endpoints
+## Основные endpoint-ы
 
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
@@ -78,13 +96,20 @@ The local commands expect PostgreSQL, Redis, and Redpanda/Kafka to be reachable 
 - `GET /api/v1/bookings/me`
 - `GET /api/v1/notifications`
 
-## Demo Flow
+## Демо-сценарий
 
-1. Login with `demo@example.com` and `Password123!`.
-2. Call `GET /api/v1/events`.
-3. Pick an event and call `GET /api/v1/events/{eventId}/sessions`.
-4. Pick a session and call `GET /api/v1/sessions/{sessionId}/seats`.
-5. Hold one available seat:
+1. Откройте `/login` или `/register`.
+2. Авторизуйтесь как `demo@example.com` / `Password123!`.
+3. Откройте `/events`.
+4. Выберите событие.
+5. Выберите сеанс.
+6. Выберите свободное место на `/sessions/{sessionId}`.
+7. Нажмите «Удержать место».
+8. Перейдите на `/checkout/{bookingId}`.
+9. Выполните успешную оплату или симулируйте неуспешную.
+10. Проверьте `/bookings` и `/notifications`.
+
+Пример hold-запроса:
 
 ```json
 {
@@ -93,7 +118,7 @@ The local commands expect PostgreSQL, Redis, and Redpanda/Kafka to be reachable 
 }
 ```
 
-6. Pay with mock payment:
+Пример запроса на оплату:
 
 ```json
 {
@@ -103,14 +128,24 @@ The local commands expect PostgreSQL, Redis, and Redpanda/Kafka to be reachable 
 }
 ```
 
-## Tests
+## Проверки и тесты
 
 ```sh
 cd reserveflow
 make test
 make test-integration
+make frontend-typecheck
+make frontend-lint
+make frontend-build
 ```
 
-Integration tests use testcontainers and require Docker.
+Интеграционные тесты используют testcontainers и требуют Docker.
 
-The integration suite covers auth, catalog reads, seat map, hold, payment success/failure, idempotency, payment ownership, expiration release, and the critical concurrent hold scenario.
+Покрыты auth, каталог, карта мест, hold, успешная/неуспешная оплата, идемпотентность, проверка владельца платежа, освобождение по expire и критичный конкурентный сценарий hold.
+
+Frontend-тесты:
+
+```sh
+cd reserveflow/frontend
+npm run test
+```

@@ -2,7 +2,7 @@ COMPOSE_FILE=deploy/docker/docker-compose.yml
 ENV_FILE=.env.example
 DATABASE_URL?=postgres://reserveflow:reserveflow@localhost:5432/reserveflow?sslmode=disable
 
-.PHONY: up down logs api worker migrate-up migrate-down seed test test-integration lint docker-build
+.PHONY: up down logs api worker frontend frontend-build frontend-lint frontend-typecheck migrate-up migrate-down seed test test-integration lint docker-build
 
 up:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --build
@@ -18,6 +18,18 @@ api:
 
 worker:
 	cd backend && go run ./cmd/worker
+
+frontend:
+	cd frontend && npm run dev
+
+frontend-build:
+	cd frontend && npm run build
+
+frontend-lint:
+	cd frontend && npm run lint
+
+frontend-typecheck:
+	cd frontend && npm run typecheck
 
 migrate-up:
 	migrate -path backend/migrations -database "$(DATABASE_URL)" up
@@ -39,3 +51,4 @@ lint:
 
 docker-build:
 	docker build -t reserveflow-backend:local ./backend
+	docker build -t reserveflow-frontend:local ./frontend

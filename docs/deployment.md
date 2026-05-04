@@ -9,26 +9,33 @@ make migrate-up
 make seed
 ```
 
-Compose starts:
+Compose поднимает:
 
+- `frontend`
 - `backend-api`
 - `backend-worker`
 - `postgres`
 - `redis`
-- `kafka` as Redpanda
+- `kafka` (Redpanda)
 - `prometheus`
 - `grafana`
 
-API health:
+Проверка API:
 
 ```sh
 curl http://localhost:8080/health
 curl http://localhost:8080/ready
 ```
 
+Frontend:
+
+```sh
+open http://localhost:3000
+```
+
 ## Kubernetes
 
-Manifests live in `deploy/k8s`.
+Манифесты находятся в `deploy/k8s`.
 
 ```sh
 kubectl apply -f deploy/k8s/namespace.yaml
@@ -36,15 +43,22 @@ kubectl apply -f deploy/k8s/secret.example.yaml
 kubectl apply -f deploy/k8s/
 ```
 
-Replace `secret.example.yaml` values before using a shared environment.
+Перед использованием в общем окружении обновите значения в `secret.example.yaml`.
 
-`backend-api` runs with 2 replicas and is stateless. `backend-worker` runs with 1 replica in MVP, but the expiration job uses `FOR UPDATE SKIP LOCKED` and can be scaled if needed.
+- `frontend`: 2 реплики, проксирует backend-запросы в сервис `backend-api`
+- `backend-api`: 2 stateless реплики
+- `backend-worker`: 1 реплика в MVP (при необходимости масштабируется, т.к. expire job использует `FOR UPDATE SKIP LOCKED`)
 
-## Environment Variables
+Ingress:
 
-See `.env.example`.
+- `reserveflow.local/` -> frontend
+- `reserveflow.local/api/v1/*` -> backend API
 
-Important values:
+## Переменные окружения
+
+Смотрите `.env.example`.
+
+Ключевые параметры:
 
 - `DATABASE_URL`
 - `REDIS_ADDR`
@@ -53,12 +67,13 @@ Important values:
 - `JWT_REFRESH_SECRET`
 - `HOLD_TTL`
 - `SEATMAP_CACHE_TTL`
+- frontend: `BACKEND_API_URL`
 
 ## Healthchecks
 
-- API liveness: `/health`
-- API readiness: `/ready`
-- Metrics: `/metrics`
+- liveness API: `/health`
+- readiness API: `/ready`
+- метрики: `/metrics`
 - Postgres: `pg_isready`
 - Redis: `redis-cli ping`
-- Redpanda: admin readiness endpoint or `rpk cluster health`
+- Redpanda: readiness endpoint admin API или `rpk cluster health`

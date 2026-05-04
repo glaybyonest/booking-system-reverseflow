@@ -1,8 +1,8 @@
 # Kafka Events
 
-ReserveFlow writes domain events to PostgreSQL first and publishes them asynchronously from `outbox_events`.
+В ReserveFlow доменные события сначала фиксируются в PostgreSQL, а затем асинхронно публикуются в Kafka из таблицы `outbox_events`.
 
-## Topics
+## Топики
 
 - `seat.held`
 - `booking.created`
@@ -13,7 +13,7 @@ ReserveFlow writes domain events to PostgreSQL first and publishes them asynchro
 - `booking.cancelled`
 - `notification.created`
 
-## Envelope
+## Формат события (envelope)
 
 ```json
 {
@@ -31,22 +31,22 @@ ReserveFlow writes domain events to PostgreSQL first and publishes them asynchro
 }
 ```
 
-## Notification Consumer
+## Notification consumer
 
-The worker listens to:
+Worker подписан на:
 
 - `booking.confirmed`
 - `booking.expired`
 - `payment.failed`
 - `booking.cancelled`
 
-Consumer idempotency is stored in `processed_events`. If the same `eventId` is received twice, only one notification is created.
+Идемпотентность consumer-а хранится в `processed_events`. Если одинаковый `eventId` приходит повторно, уведомление создаётся только один раз.
 
-## Outbox Pattern
+## Outbox pattern
 
-Business transactions insert into `outbox_events` before commit. The worker:
+Бизнес-транзакции пишут события в `outbox_events` до commit. Далее worker:
 
-1. Selects pending rows with `FOR UPDATE SKIP LOCKED`.
-2. Publishes to Kafka topic named by `event_type`.
-3. Marks the row `published`.
-4. Retries later if Kafka publish fails.
+1. Выбирает pending-записи с `FOR UPDATE SKIP LOCKED`.
+2. Публикует сообщение в Kafka-топик с именем `event_type`.
+3. Помечает запись как `published`.
+4. При ошибке публикации повторяет отправку позже.

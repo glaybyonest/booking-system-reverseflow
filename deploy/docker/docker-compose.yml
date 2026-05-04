@@ -119,6 +119,20 @@ services:
         condition: service_healthy
     networks: [reserveflow]
 
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    environment:
+      BACKEND_API_URL: http://backend-api:8080
+      NEXT_PUBLIC_APP_NAME: ReserveFlow
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    networks: [reserveflow]
+
   prometheus:
     image: prom/prometheus:v2.54.1
     ports:

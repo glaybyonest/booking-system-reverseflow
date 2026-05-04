@@ -1,41 +1,50 @@
 # Architecture
 
-ReserveFlow is a backend-only modular monolith. It is one Go deployable codebase with clear domain modules instead of distributed services in the MVP.
+ReserveFlow — модульный монолит на Go (backend-first). В MVP это единый deployable без разделения на микросервисы, но с чёткими границами доменных модулей.
 
-## Modules
+## Модули
 
-- `auth`: users, bcrypt, JWT access tokens, hashed refresh tokens
-- `events`: published event catalog
-- `sessions`: scheduled event sessions and hall metadata
-- `seats`: seat map read model and Redis cache
-- `bookings`: hold, cancel, expire, confirm, payment-failed transitions
-- `payments`: mock provider and idempotency
-- `notifications`: notification API and Kafka-driven creation
+- `auth`: пользователи, bcrypt, access/refresh JWT
+- `events`: каталог опубликованных событий
+- `sessions`: расписание сеансов и данные залов
+- `seats`: read model карты мест и кэш в Redis
+- `bookings`: hold/cancel/expire/confirm/payment_failed переходы
+- `payments`: mock-провайдер и идемпотентность
+- `notifications`: API уведомлений и генерация через Kafka события
 
-Each module is split into:
+Структура каждого модуля:
 
-- `domain`: entities, statuses, transitions, domain errors
-- `application`: use cases and orchestration
-- `transport`: HTTP handlers and DTOs
-- `repository`: PostgreSQL persistence
+- `domain`: сущности, статусы, переходы, доменные ошибки
+- `application`: use case-ы и оркестрация
+- `transport`: HTTP handlers и DTO
+- `repository`: работа с PostgreSQL
 
-## Source Of Truth
+## Источник истины
 
-PostgreSQL is the source of truth for booking consistency. Seat availability lives in `session_seats`, and the hold flow locks the exact row with `SELECT ... FOR UPDATE`.
+Источник истины для консистентности бронирований — PostgreSQL. Состояние мест хранится в `session_seats`, а hold-сценарий блокирует конкретную строку через `SELECT ... FOR UPDATE`.
 
-Redis is intentionally not the booking authority. It stores temporary hold TTL keys, seat map cache, idempotency lookup cache, and future rate limit counters. If Redis fails after a successful database commit, the booking remains consistent.
+Redis не является authority для брони. Он используется для:
 
-## Kafka And Outbox
+- TTL-ключей удержания
+- кэша карты мест
+- кэша lookup по идемпотентности платежей
+- будущих счётчиков rate-limit
 
-Business transactions write rows to `outbox_events`. The worker publishes those rows to Kafka topics and marks them as `published` after Kafka confirms the write.
+Если Redis недоступен после успешного DB commit, данные брони остаются консистентными.
 
-This avoids losing domain events when a transaction commits but the process crashes before publishing.
+## Kafka и Outbox
 
-## Runtime Modes
+Доменные события сначала пишутся в `outbox_events` в рамках бизнес-транзакции. Затем worker публикует их в Kafka и помечает как `published`.
 
-- `backend-api`: stateless HTTP server. It can be horizontally scaled.
-- `backend-worker`: expiration job, outbox publisher, notification consumers. The expiration job uses `FOR UPDATE SKIP LOCKED`, so multiple worker replicas are safe, though MVP manifests start one replica.
+Это предотвращает потерю событий в случае, когда транзакция уже зафиксирована, а процесс упал до отправки в Kafka.
 
-## Scaling Notes
+## Режимы запуска
 
-API replicas are stateless and can be scaled behind a Service or ingress. PostgreSQL row locks remain the double-booking protection. Redis improves read performance and short-lived metadata, but losing Redis does not make confirmed booking state inconsistent.
+- `backend-api`: stateless HTTP сервер, горизонтально масштабируется
+- `backend-worker`: expire job, outbox publisher, consumers уведомлений
+
+Expire job использует `FOR UPDATE SKIP LOCKED`, поэтому допускает несколько реплик worker-а.
+
+## Масштабирование
+
+API-реплики stateless и масштабируются за ingress/service. Защита от double-booking обеспечивается row lock-ами PostgreSQL. Redis ускоряет чтение и хранит краткоживущие метаданные, но не влияет на консистентность подтверждённых броней.

@@ -1,60 +1,60 @@
 # Testing
 
-## Unit Tests
+## Unit-тесты
 
-Unit tests cover:
+Unit-тесты покрывают:
 
-- booking status transitions
+- переходы статусов брони
 - `CanConfirm`
 - `CanCancel`
 - `CanExpire`
-- hold duration calculation
-- domain errors
-- payment forced status validation
+- расчёт времени удержания
+- доменные ошибки
+- валидацию forced-статуса платежа
 
-Run:
+Запуск:
 
 ```sh
 cd reserveflow
 make test
 ```
 
-## Integration Tests
+## Интеграционные тесты
 
-Integration tests are behind the `integration` build tag and use testcontainers.
+Интеграционные тесты запускаются под build tag `integration` и используют testcontainers.
 
-They cover:
+Покрытие:
 
 - register/login/me
-- event list
-- event sessions
-- session details
-- seat map
-- hold seat
-- payment success
-- payment idempotent replay
-- idempotency conflict
-- payment ownership guard
-- payment failure and seat release
-- expiration job release
-- critical concurrent hold
+- список событий
+- сеансы события
+- детали сеанса
+- карта мест
+- удержание места
+- успешная оплата
+- идемпотентный replay платежа
+- конфликт идемпотентности
+- защита по владельцу платежа
+- неуспешная оплата и освобождение места
+- освобождение места по expiration job
+- критичный конкурентный hold
 
-Run:
+Запуск:
 
 ```sh
 cd reserveflow
 make test-integration
 ```
 
-## Critical Concurrency Test
+## Критичный тест конкуренции
 
-`backend/tests/booking_concurrency_integration_test.go` starts PostgreSQL, applies migrations and seed data, then runs 20 parallel hold attempts for the same `session_seat`.
+`backend/tests/booking_concurrency_integration_test.go` поднимает PostgreSQL, применяет миграции и seed, затем запускает 20 параллельных попыток hold для одного `session_seat`.
 
-Expected result:
+Ожидаемый результат:
 
-- 1 successful hold
-- 19 conflicts
-- exactly one `pending` booking
+- 1 успешное удержание
+- 19 конфликтов
+- ровно одна `pending` бронь
 - `session_seat.status = held`
 
-This verifies that PostgreSQL row locking is the double-booking guard.
+Этот тест подтверждает, что row lock в PostgreSQL защищает от double-booking.
