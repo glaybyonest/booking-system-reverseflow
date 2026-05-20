@@ -20,12 +20,13 @@ const (
 )
 
 var (
-	ErrSeatNotFound      = errors.New("seat not found for session")
-	ErrSeatNotAvailable  = errors.New("seat is not available")
-	ErrBookingNotFound   = errors.New("booking not found")
-	ErrBookingNotOwner   = errors.New("booking does not belong to user")
-	ErrBookingExpired    = errors.New("booking expired")
-	ErrBookingNotPending = errors.New("booking is not pending")
+	ErrSeatNotFound       = errors.New("seat not found for session")
+	ErrSeatNotAvailable   = errors.New("seat is not available")
+	ErrSessionNotBookable = errors.New("session is not bookable")
+	ErrBookingNotFound    = errors.New("booking not found")
+	ErrBookingNotOwner    = errors.New("booking does not belong to user")
+	ErrBookingExpired     = errors.New("booking expired")
+	ErrBookingNotPending  = errors.New("booking is not pending")
 )
 
 type Booking struct {

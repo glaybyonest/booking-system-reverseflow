@@ -2,12 +2,13 @@ import * as React from "react";
 
 import { cn } from "@/shared/lib/cn";
 
-type AlertVariant = "error" | "info" | "success";
+type AlertVariant = "error" | "info" | "success" | "warning";
 
 const variants: Record<AlertVariant, string> = {
-  error: "border-red-100 bg-red-50 text-red-600",
-  info: "border-gray-200 bg-gray-50 text-gray-600",
-  success: "border-gray-200 bg-gray-900 text-white"
+  error: "border-err/20 bg-err-soft text-err-fg",
+  info: "border-info/20 bg-info-soft text-info-fg",
+  success: "border-ok/20 bg-ok-soft text-ok-fg",
+  warning: "border-warn/20 bg-warn-soft text-warn-fg"
 };
 
 export function Alert({

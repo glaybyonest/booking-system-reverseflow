@@ -28,13 +28,13 @@ type Template struct {
 func TemplateForEvent(eventType string) (Template, bool) {
 	switch eventType {
 	case "booking.confirmed":
-		return Template{Type: TypeBookingConfirmed, Title: "Booking confirmed", Message: "Your booking has been confirmed."}, true
+		return Template{Type: TypeBookingConfirmed, Title: "Бронь подтверждена", Message: "Оплата прошла, место закреплено за вами."}, true
 	case "booking.expired":
-		return Template{Type: TypeBookingExpired, Title: "Booking expired", Message: "Your booking expired because payment was not completed in time."}, true
+		return Template{Type: TypeBookingExpired, Title: "Время брони истекло", Message: "Оплата не была завершена вовремя, место снова доступно."}, true
 	case "payment.failed":
-		return Template{Type: TypePaymentFailed, Title: "Payment failed", Message: "Payment failed and the seat was released."}, true
+		return Template{Type: TypePaymentFailed, Title: "Оплата не прошла", Message: "Платеж отклонен, удержание места снято."}, true
 	case "booking.cancelled":
-		return Template{Type: TypeBookingCancelled, Title: "Booking cancelled", Message: "Your pending booking was cancelled."}, true
+		return Template{Type: TypeBookingCancelled, Title: "Бронь отменена", Message: "Ожидающая оплата бронь отменена, место освобождено."}, true
 	default:
 		return Template{}, false
 	}

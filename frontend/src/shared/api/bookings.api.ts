@@ -3,7 +3,7 @@ import { clientFetch } from "@/shared/api/client";
 import { normalizeBooking, normalizeHoldSeatResponse } from "@/shared/api/mappers";
 import type { ApiList } from "@/shared/types/api";
 
-export async function holdSeat(input: { sessionId: string; seatId: string }) {
+export async function holdSeat(input: { sessionId: string; seatIds: string[] }) {
   const response = await clientFetch<unknown>("bookings/hold", {
     method: "POST",
     json: input

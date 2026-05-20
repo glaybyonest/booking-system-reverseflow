@@ -1,151 +1,135 @@
 # ReserveFlow
 
-ReserveFlow — полнофункциональная система бронирования мест на события. Проект включает Go backend с JSON REST API и Next.js frontend, который покрывает полный пользовательский путь: регистрация, вход, каталог событий, выбор мест, удержание, оплата, история броней и уведомления.
+ReserveFlow объединяет два сценария в одном каталоге событий:
 
-Ключевая инженерная цель — безопасное конкурентное бронирование. Источник истины — PostgreSQL: в сценарии hold используется транзакция и блокировка `SELECT ... FOR UPDATE` по `session_seats`, чтобы только один параллельный запрос мог удержать конкретное место.
+- внутренние события ReserveFlow с полноценным SeatMap -> Hold -> Checkout -> Mock Payment;
+- импортированные Moscow-only события из легальных API KudaGo и Timepad для discovery-каталога и карты.
 
-## Технологии
+На первом этапе внешняя синхронизация работает только для Москвы. Санкт-Петербург, другие города, страны и международные события по умолчанию не импортируются.
 
-- Go + HTTP-роутер chi
-- PostgreSQL
-- Redis (TTL hold-ключей, кэш карты мест, кэш идемпотентности платежей)
-- Kafka (совместимый с Redpanda)
-- Outbox pattern
-- Метрики Prometheus
-- Структурированные логи zerolog
-- Docker Compose и Kubernetes-манифесты
-- Next.js frontend с auth-прокси через HTTP-only cookie
+## Что реализовано
 
-## Архитектура
+- `/events` показывает внутренние и импортированные московские события в одном каталоге.
+- `/events/map` показывает актуальные события Москвы на карте Leaflet.
+- Imported events по умолчанию имеют `booking_mode=external_link_only`.
+- `POST /api/v1/admin/events/{eventId}/make-demo-bookable` переводит imported event в demo booking без замены существующего booking core.
+- Worker умеет запускать периодический Moscow sync по `EXTERNAL_SYNC_*` настройкам.
 
-Backend реализован как модульный монолит в `backend/internal/modules`:
+## Booking modes
 
-- `auth`
-- `events`
-- `sessions`
-- `seats`
-- `bookings`
-- `payments`
-- `notifications`
-
-Каждый модуль следует слоям: `domain`, `application`, `transport`, `repository`.
-
-У Go-приложения два режима запуска:
-
-- `backend-api`: HTTP API
-- `backend-worker`: expire job, outbox publisher, consumers уведомлений
+- `reserveflow_managed`: обычное внутреннее событие ReserveFlow, бронирование доступно.
+- `external_link_only`: imported event, доступен просмотр и переход к организатору, бронирование внутри ReserveFlow отключено.
+- `demo_bookable`: imported event подключён к demo hall и проходит через текущий SeatMap/Hold/Checkout/Payment flow.
+- `general_admission`: зарезервировано на будущее, сейчас не используется.
 
 ## Быстрый старт
 
-```sh
-cd reserveflow
-make up
-make migrate-up
-make seed
+Требуется Docker Desktop.
+
+```powershell
+cd C:\development\booking-system\reserveflow
+powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1
 ```
 
-После запуска:
+После старта доступны:
 
 - frontend: `http://localhost:3000`
-- backend API: `http://localhost:8080`
+- backend API: `http://localhost:18080/api/v1`
+- backend health: `http://localhost:18080/health`
 - Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
+- Grafana: `http://localhost:3001`
 
-## Локальный запуск backend
+Локальный frontend без `frontend/.env.local` сначала ищет ReserveFlow backend на `http://localhost:18080`, а затем на `http://localhost:8080`. Порт `8080` остаётся direct-режимом для standalone backend без Docker Compose.
 
-```sh
-cd reserveflow
-cp .env.example .env
-make api
-make worker
+Если нужно поднять окружение без seed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev-up.ps1 -SkipSeed
 ```
 
-Для локального запуска должны быть доступны PostgreSQL, Redis и Kafka/Redpanda из параметров `.env.example`.
+## Demo пользователи
 
-## Локальный запуск frontend
+- `demo@example.com` / `Password123!`
+- `admin@example.com` / `Password123!`
 
-```sh
-cd reserveflow/frontend
-cp .env.example .env.local
+Админ нужен для ручного sync и `make-demo-bookable`.
+
+## Moscow-only sync
+
+`.env.example` уже содержит безопасные дефолты:
+
+```env
+EXTERNAL_SYNC_ENABLED=false
+EXTERNAL_SYNC_INTERVAL=6h
+EXTERNAL_SYNC_CITY=moscow
+EXTERNAL_SYNC_KUDAGO_LOCATION=msk
+EXTERNAL_SYNC_TIMEPAD_CITY=Москва
+EXTERNAL_SYNC_DAYS_AHEAD=180
+EXTERNAL_SYNC_LOOKBACK_DAYS=14
+EXTERNAL_SYNC_MAX_PAGES=500
+EXTERNAL_SYNC_PAGE_SIZE=100
+KUDAGO_BASE_URL=https://kudago.com/public-api/v1.4
+TIMEPAD_BASE_URL=https://api.timepad.ru
+NEXT_PUBLIC_MAP_DEFAULT_LAT=55.751244
+NEXT_PUBLIC_MAP_DEFAULT_LON=37.618423
+NEXT_PUBLIC_MAP_DEFAULT_ZOOM=11
+```
+
+Ручной sync:
+
+```bash
+curl -X POST http://localhost:18080/api/v1/admin/integrations/sync/moscow \
+  -H "Authorization: Bearer <admin-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"providers":["kudago","timepad"],"daysAhead":180,"lookbackDays":14}'
+```
+
+Promotion imported event в demo booking:
+
+```bash
+curl -X POST http://localhost:18080/api/v1/admin/events/<eventId>/make-demo-bookable \
+  -H "Authorization: Bearer <admin-access-token>"
+```
+
+## Команды качества
+
+Backend:
+
+```powershell
+cd backend
+go test ./...
+```
+
+Frontend:
+
+```powershell
+cd frontend
 npm install
-npm run dev
-```
-
-Схема запросов:
-
-```text
-Браузер -> Next.js (/api/auth, /api/backend) -> Go backend (/api/v1)
-```
-
-JWT хранится только в HTTP-only cookie, не в `localStorage`.
-
-## Тестовый пользователь
-
-- Email: `demo@example.com`
-- Пароль: `Password123!`
-
-## Основные endpoint-ы
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `GET /api/v1/events`
-- `GET /api/v1/events/{eventId}/sessions`
-- `GET /api/v1/sessions/{sessionId}/seats`
-- `POST /api/v1/bookings/hold`
-- `POST /api/v1/payments`
-- `GET /api/v1/bookings/me`
-- `GET /api/v1/notifications`
-
-## Демо-сценарий
-
-1. Откройте `/login` или `/register`.
-2. Авторизуйтесь как `demo@example.com` / `Password123!`.
-3. Откройте `/events`.
-4. Выберите событие.
-5. Выберите сеанс.
-6. Выберите свободное место на `/sessions/{sessionId}`.
-7. Нажмите «Удержать место».
-8. Перейдите на `/checkout/{bookingId}`.
-9. Выполните успешную оплату или симулируйте неуспешную.
-10. Проверьте `/bookings` и `/notifications`.
-
-Пример hold-запроса:
-
-```json
-{
-  "sessionId": "50000000-0000-0000-0000-000000000001",
-  "seatId": "seat-uuid"
-}
-```
-
-Пример запроса на оплату:
-
-```json
-{
-  "bookingId": "booking-uuid",
-  "idempotencyKey": "demo-payment-1",
-  "forceStatus": "succeeded"
-}
-```
-
-## Проверки и тесты
-
-```sh
-cd reserveflow
-make test
-make test-integration
-make frontend-typecheck
-make frontend-lint
-make frontend-build
-```
-
-Интеграционные тесты используют testcontainers и требуют Docker.
-
-Покрыты auth, каталог, карта мест, hold, успешная/неуспешная оплата, идемпотентность, проверка владельца платежа, освобождение по expire и критичный конкурентный сценарий hold.
-
-Frontend-тесты:
-
-```sh
-cd reserveflow/frontend
+npm run typecheck
+npm run lint
+npm run build
 npm run test
 ```
+
+Integration tests используют `testcontainers` и требуют запущенный Docker daemon:
+
+```powershell
+cd backend
+go test -tags=integration ./tests
+```
+
+## Ограничения текущего релиза
+
+- Imported external events используются как discovery-данные, а не как реальные продажи билетов.
+- Без `make-demo-bookable` imported sessions не имеют seat inventory и не участвуют в бронировании.
+- Yandex Afisha scraping и другой scraping афиш не используются.
+- Future sources вроде PRO.Культура.РФ и `data.mos.ru` пока только задокументированы.
+
+## Документация
+
+- `docs/api.md`
+- `docs/frontend.md`
+- `docs/deployment.md`
+- `docs/integration-notes.md`
+- `docs/external-events.md`
+- `docs/moscow-events-sync.md`

@@ -6,6 +6,18 @@ RUN npm install
 
 FROM deps AS build
 
+ARG NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+ARG NEXT_PUBLIC_MAP_DEFAULT_LAT=55.751244
+ARG NEXT_PUBLIC_MAP_DEFAULT_LON=37.618423
+ARG NEXT_PUBLIC_MAP_DEFAULT_ZOOM=11
+ARG NEXT_PUBLIC_APP_NAME=ReserveFlow
+
+ENV NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+ENV NEXT_PUBLIC_MAP_DEFAULT_LAT=$NEXT_PUBLIC_MAP_DEFAULT_LAT
+ENV NEXT_PUBLIC_MAP_DEFAULT_LON=$NEXT_PUBLIC_MAP_DEFAULT_LON
+ENV NEXT_PUBLIC_MAP_DEFAULT_ZOOM=$NEXT_PUBLIC_MAP_DEFAULT_ZOOM
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+
 WORKDIR /app
 COPY . .
 RUN npm run build
@@ -14,11 +26,12 @@ FROM node:24-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev
-COPY --from=build /app/.next ./.next
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
 COPY --from=build /app/public ./public
-COPY --from=build /app/next.config.ts ./next.config.ts
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
 
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

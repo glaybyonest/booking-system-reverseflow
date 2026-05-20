@@ -20,6 +20,9 @@ import (
 	eventsapp "reserveflow/backend/internal/modules/events/application"
 	eventsrepo "reserveflow/backend/internal/modules/events/repository"
 	eventstransport "reserveflow/backend/internal/modules/events/transport"
+	integrationsapp "reserveflow/backend/internal/modules/integrations/application"
+	integrationsrepo "reserveflow/backend/internal/modules/integrations/repository"
+	integrationstransport "reserveflow/backend/internal/modules/integrations/transport"
 	notificationsapp "reserveflow/backend/internal/modules/notifications/application"
 	notificationsrepo "reserveflow/backend/internal/modules/notifications/repository"
 	notificationstransport "reserveflow/backend/internal/modules/notifications/transport"
@@ -44,6 +47,7 @@ type Dependencies struct {
 
 	AuthHandler          *authtransport.Handler
 	EventsHandler        *eventstransport.Handler
+	IntegrationsHandler  *integrationstransport.Handler
 	SessionsHandler      *sessionstransport.Handler
 	SeatsHandler         *seatstransport.Handler
 	BookingsHandler      *bookingstransport.Handler
@@ -51,6 +55,7 @@ type Dependencies struct {
 	NotificationsHandler *notificationstransport.Handler
 
 	BookingsService      *bookingsapp.Service
+	IntegrationsService  *integrationsapp.Service
 	NotificationsService *notificationsapp.Service
 }
 
@@ -72,6 +77,9 @@ func NewDependencies(ctx context.Context, cfg Config) (*Dependencies, error) {
 
 	eventsRepo := eventsrepo.NewPostgresRepository(pool)
 	eventsService := eventsapp.NewService(eventsRepo)
+
+	integrationsRepo := integrationsrepo.NewPostgresRepository(pool)
+	integrationsService := integrationsapp.NewService(integrationsRepo, log).WithCache(redisClient)
 
 	sessionsRepo := sessionsrepo.NewPostgresRepository(pool)
 	sessionsService := sessionsapp.NewService(sessionsRepo)
@@ -97,12 +105,14 @@ func NewDependencies(ctx context.Context, cfg Config) (*Dependencies, error) {
 		Kafka:                kafkaProducer,
 		AuthHandler:          authtransport.NewHandler(authService),
 		EventsHandler:        eventstransport.NewHandler(eventsService),
+		IntegrationsHandler:  integrationstransport.NewHandler(integrationsService),
 		SessionsHandler:      sessionstransport.NewHandler(sessionsService),
 		SeatsHandler:         seatstransport.NewHandler(seatsService),
 		BookingsHandler:      bookingstransport.NewHandler(bookingsService),
 		PaymentsHandler:      paymentstransport.NewHandler(paymentsService),
 		NotificationsHandler: notificationstransport.NewHandler(notificationsService),
 		BookingsService:      bookingsService,
+		IntegrationsService:  integrationsService,
 		NotificationsService: notificationsService,
 	}, nil
 }

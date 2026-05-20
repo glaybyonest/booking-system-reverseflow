@@ -5,30 +5,40 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import type { Seat } from "@/entities/seat/types";
+import { HoldSeatButton } from "@/features/seat-selection/hold-seat-button";
+import {
+  useHoldSeat,
+  useSeatMap,
+  useSession
+} from "@/features/seat-selection/seat-selection.hooks";
 import { friendlyApiError } from "@/shared/api/errors";
 import { formatDateTime, formatMoney, formatTimeRange } from "@/shared/lib/date";
 import { routes } from "@/shared/lib/routes";
 import { Alert } from "@/shared/ui/alert";
-import { Badge } from "@/shared/ui/badge";
-import { Card } from "@/shared/ui/card";
 import { Spinner } from "@/shared/ui/spinner";
-import { SeatMap } from "@/widgets/seat-map/seat-map";
-import { HoldSeatButton } from "@/features/seat-selection/hold-seat-button";
-import { useHoldSeat, useSeatMap, useSession } from "@/features/seat-selection/seat-selection.hooks";
+import { ExactSeatMap } from "@/widgets/seat-map/exact-seat-map";
+
+const MAX_SELECTED_SEATS = 4;
 
 export function SeatSelection({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const session = useSession(sessionId);
   const seatMap = useSeatMap(sessionId);
   const hold = useHoldSeat();
-  const [selectedSeatId, setSelectedSeatId] = useState<string | undefined>();
+  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const rawSelectedSeat = useMemo(
-    () => seatMap.data?.seats.find((seat) => seat.seatId === selectedSeatId),
-    [seatMap.data?.seats, selectedSeatId]
-  );
-  const selectedSeat = rawSelectedSeat?.status === "available" ? rawSelectedSeat : undefined;
+  const selectedSeats = useMemo(() => {
+    const map = new Map((seatMap.data?.seats ?? []).map((seat) => [seat.seatId, seat]));
+    return selectedSeatIds
+      .map((seatId) => map.get(seatId))
+      .filter((seat): seat is Seat => {
+        if (!seat) return false;
+        return seat.status === "available";
+      });
+  }, [seatMap.data?.seats, selectedSeatIds]);
+
+  const totalPrice = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
 
   if (session.isLoading || seatMap.isLoading) {
     return (
@@ -46,94 +56,148 @@ export function SeatSelection({ sessionId }: { sessionId: string }) {
   const title = seatMap.data?.event?.title ?? session.data?.event?.title ?? "Мероприятие";
   const hall = seatMap.data?.hall?.name ?? session.data?.hall?.name ?? "Зал уточняется";
 
+  function toggleSeat(seat: Seat) {
+    if (seat.status !== "available") {
+      setLocalError("Это место уже недоступно. Выберите другое.");
+      return;
+    }
+    setLocalError(null);
+    setSelectedSeatIds((current) => {
+      if (current.includes(seat.seatId)) {
+        return current.filter((seatId) => seatId !== seat.seatId);
+      }
+      if (current.length >= MAX_SELECTED_SEATS) {
+        setLocalError("За один раз можно выбрать не больше 4 билетов.");
+        return current;
+      }
+      return [...current, seat.seatId];
+    });
+  }
+
   function submitHold() {
-    if (!selectedSeat) return;
+    if (!selectedSeats.length) return;
     setLocalError(null);
     hold.mutate(
-      { sessionId, seatId: selectedSeat.seatId },
+      { sessionId, seatIds: selectedSeats.map((seat) => seat.seatId) },
       {
         onSuccess: (result) => router.push(routes.checkout(result.bookingId)),
         onError: (err) => {
           setLocalError(friendlyApiError(err));
           seatMap.refetch();
-          setSelectedSeatId(undefined);
+          setSelectedSeatIds([]);
         }
       }
     );
   }
 
+  const hasVip = selectedSeats.some((s) => s.price > 3000);
+
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      {/* ── Sidebar ── */}
       <aside className="lg:col-span-4">
-        <Card className="sticky top-24 p-6">
-          <Badge className="mb-4">Сеанс</Badge>
-          <h1 className="mb-2 text-2xl font-bold">{title}</h1>
-          <div className="mb-8 space-y-2 text-sm text-gray-500">
-            <p className="flex gap-2">
-              <CalendarDays className="h-4 w-4 shrink-0" />
-              <span>
-                {formatDateTime(session.data?.startsAt)} ·{" "}
-                {formatTimeRange(session.data?.startsAt, session.data?.endsAt)}
-              </span>
+        <div className="sticky top-24 overflow-hidden rounded-2xl border border-border bg-white shadow-card">
+          {/* Header */}
+          <div className="border-b border-border px-5 py-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-mute-2">
+              ВЫБРАННОЕ МЕСТО УДЕРЖИВАЕТСЯ
             </p>
-            <p className="flex gap-2">
-              <MapPin className="h-4 w-4 shrink-0" />
-              <span>{hall}</span>
-            </p>
+            <h1 className="mt-1 line-clamp-2 text-[15px] font-bold text-ink">{title}</h1>
           </div>
 
-          <div className="border-t border-gray-100 pt-6">
-            <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-400">
-              Выбранное место
-            </h3>
-            <div className="mb-6 flex items-center justify-between rounded-2xl border border-gray-200 bg-[#F8F9FA] p-4">
-              {selectedSeat ? (
-                <>
-                  <div>
-                    <div className="text-lg font-bold">
-                      Ряд {selectedSeat.row}, место {selectedSeat.number}
-                    </div>
-                    <div className="mt-0.5 text-xs text-gray-500">Стандартный билет</div>
-                  </div>
-                  <div className="text-xl font-bold">{formatMoney(selectedSeat.price)}</div>
-                </>
-              ) : (
-                <p className="text-sm text-gray-500">Выберите свободное место на схеме</p>
+          {/* Session info */}
+          <div className="space-y-2 px-5 py-4">
+            <div className="flex items-center gap-2 text-xs text-mute">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-mute-2" />
+              <span>
+                {formatDateTime(session.data?.startsAt)}
+                {session.data?.endsAt
+                  ? ` · ${formatTimeRange(session.data?.startsAt, session.data?.endsAt)}`
+                  : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-mute">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-mute-2" />
+              <span>{hall}</span>
+            </div>
+          </div>
+
+          {/* Selected seats */}
+          <div className="border-t border-border px-5 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-mute-2">
+                Выбранные места
+              </p>
+              {hasVip && (
+                <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-warn-fg">
+                  VIP
+                </span>
               )}
             </div>
-            {localError ? (
-              <Alert variant="error" className="mb-4">
+
+            <div className="min-h-[80px] rounded-xl border border-border bg-bg p-3">
+              {selectedSeats.length ? (
+                <div className="space-y-2">
+                  {selectedSeats.map((seat) => (
+                    <div
+                      key={seat.seatId}
+                      className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm"
+                    >
+                      <span className="text-sm font-semibold text-ink">
+                        Ряд {seat.row}, место {seat.number}
+                      </span>
+                      <span className="text-sm font-bold text-ink">{formatMoney(seat.price)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="pt-3 text-center text-xs text-mute">
+                  Выберите от 1 до {MAX_SELECTED_SEATS} мест на схеме
+                </p>
+              )}
+            </div>
+
+            {selectedSeats.length > 0 && (
+              <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                <span className="text-xs text-mute">
+                  Билетов: {selectedSeats.length} из {MAX_SELECTED_SEATS}
+                </span>
+                <span className="text-xl font-extrabold text-ink">{formatMoney(totalPrice)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="border-t border-border px-5 pb-5 pt-4">
+            {localError && (
+              <Alert variant="error" className="mb-3 text-xs">
                 {localError}
               </Alert>
-            ) : null}
+            )}
+
             <form
-              onSubmit={(event) => {
-                event.preventDefault();
+              onSubmit={(e) => {
+                e.preventDefault();
                 submitHold();
               }}
             >
-              <HoldSeatButton disabled={!selectedSeat} pending={hold.isPending} />
+              <HoldSeatButton disabled={!selectedSeats.length} pending={hold.isPending} />
             </form>
-            <p className="mt-3 text-center text-xs text-gray-400">
-              После нажатия место будет удержано на 10 минут
+
+            <p className="mt-2.5 text-center text-[11px] text-mute-2">
+              Место удерживается 10 минут после подтверждения
             </p>
           </div>
-        </Card>
+        </div>
       </aside>
 
-      <section className="flex flex-col items-center overflow-hidden rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm sm:p-10 lg:col-span-8">
-        <div className="mb-16 flex h-12 w-full max-w-sm items-start justify-center rounded-t-[50%] border-t-4 border-gray-200 bg-gradient-to-b from-gray-100 to-transparent pt-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-          Сцена
-        </div>
-        <SeatMap
+      {/* ── Seat map ── */}
+      <section className="overflow-hidden rounded-2xl border border-border bg-white p-6 shadow-sm lg:col-span-8 sm:p-10">
+        <ExactSeatMap
+          layout={seatMap.data?.layout}
           seats={seatMap.data?.seats ?? []}
-          selectedSeatId={selectedSeat?.seatId}
-          onSelectSeat={(seat: Seat) => {
-            if (seat.status === "available") {
-              setSelectedSeatId(seat.seatId);
-              setLocalError(null);
-            }
-          }}
+          selectedSeatIds={selectedSeatIds}
+          onToggleSeat={toggleSeat}
         />
       </section>
     </div>

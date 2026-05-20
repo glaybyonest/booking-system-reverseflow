@@ -18,24 +18,56 @@ html {
 body {
   min-height: 100vh;
   background: #f8f9fa;
-  color: #111827;
+  color: #0b0d10;
 }
 
 ::selection {
-  background: #111827;
+  background: #0b0d10;
   color: white;
 }
 
+/* Seat map scroll */
 .seat-scroll::-webkit-scrollbar {
   height: 6px;
 }
-
 .seat-scroll::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 999px;
 }
-
 .seat-scroll::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 999px;
+}
+
+/* Yandex map markers */
+.event-map-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  width: 22px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.event-map-marker__dot {
+  display: block;
+  height: 22px;
+  width: 22px;
+  border-radius: 999px;
+  border: 4px solid #ffffff;
+  background: #0b0d10;
+  box-shadow: 0 10px 22px rgba(11, 13, 16, 0.22);
+}
+
+/* Category filter pills */
+.pill-active {
+  background: #0b0d10;
+  color: #fff;
+}
+.pill-inactive {
+  background: #fff;
+  color: #2a2d32;
+  border: 1px solid #e4e6ea;
 }

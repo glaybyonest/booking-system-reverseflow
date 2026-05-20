@@ -32,9 +32,12 @@ export function friendlyApiError(error: unknown) {
     SEAT_ALREADY_HELD: "Это место временно удерживается другим пользователем.",
     BOOKING_EXPIRED: "Бронь истекла. Выберите место заново.",
     BOOKING_NOT_PENDING: "Эту бронь уже нельзя оплатить.",
+    BOOKING_NOT_FOUND: "Бронь не найдена.",
+    PAYMENT_ALREADY_PROCESSED: "Платеж по этой брони уже обработан.",
     IDEMPOTENCY_CONFLICT: "Платеж с таким ключом уже использовался для другой операции.",
     UNAUTHORIZED: "Войдите, чтобы продолжить.",
     FORBIDDEN: "У вас нет доступа к этому действию.",
+    NOT_FOUND: "Данные не найдены.",
     VALIDATION_ERROR: "Проверьте введенные данные."
   };
   return messages[error.code] ?? error.message;

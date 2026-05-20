@@ -2,12 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { getEventById, getEventSessions, getEvents } from "@/shared/api/events.api";
+import { getEventById, getEvents, getEventsMap, type EventsQuery } from "@/shared/api/events.api";
 
-export function useEvents() {
+export function useEvents(query: EventsQuery) {
   return useQuery({
-    queryKey: ["events"],
-    queryFn: getEvents
+    queryKey: ["events", query],
+    queryFn: () => getEvents(query)
   });
 }
 
@@ -19,10 +19,9 @@ export function useEvent(eventId: string) {
   });
 }
 
-export function useEventSessions(eventId: string) {
+export function useEventsMap(query: EventsQuery) {
   return useQuery({
-    queryKey: ["events", eventId, "sessions"],
-    queryFn: () => getEventSessions(eventId),
-    enabled: Boolean(eventId)
+    queryKey: ["events", "map", query],
+    queryFn: () => getEventsMap(query)
   });
 }

@@ -1,23 +1,25 @@
 "use client";
 
-import { friendlyApiError } from "@/shared/api/errors";
-import { Alert } from "@/shared/ui/alert";
+import type { Session } from "@/entities/session/types";
+import { useMe } from "@/features/auth/auth.hooks";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { Spinner } from "@/shared/ui/spinner";
 import { SessionCard } from "@/widgets/session-card/session-card";
-import { useEventSessions } from "@/features/event-list/event-list.hooks";
 
-export function SessionList({ eventId }: { eventId: string }) {
-  const sessions = useEventSessions(eventId);
-  if (sessions.isLoading) return <Spinner />;
-  if (sessions.error) return <Alert variant="error">{friendlyApiError(sessions.error)}</Alert>;
-  if (!sessions.data?.length) {
-    return <EmptyState title="Сеансов пока нет" description="Для этого мероприятия еще нет расписания." />;
+export function SessionList({ sessions }: { sessions: Session[] }) {
+  const me = useMe();
+
+  if (!sessions.length) {
+    return (
+      <EmptyState
+        title="Сеансов пока нет"
+        description="Для этого мероприятия расписание еще не опубликовано."
+      />
+    );
   }
   return (
     <div className="space-y-4">
-      {sessions.data.map((session) => (
-        <SessionCard key={session.id} session={session} />
+      {sessions.map((session) => (
+        <SessionCard key={session.id} session={session} isAdmin={me.data?.role === "admin"} />
       ))}
     </div>
   );

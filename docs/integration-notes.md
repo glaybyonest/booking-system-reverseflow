@@ -1,69 +1,95 @@
 # Integration Notes
 
-## Что проверено end-to-end
+## Что проверено
 
-- Сверка frontend API-вызовов с реальными backend route-ами (`/api/v1/*`).
-- Сверка TypeScript DTO с реальными JSON-ответами backend.
-- Проверка auth flow: `login`, `register`, `refresh`, `logout`, `protected routes`.
-- Проверка booking flow: события, детали, сеансы, polling карты мест, hold, 409 conflict, checkout timer, payment idempotency, мои брони, уведомления.
-- Прогон `npm run lint`, `npm run typecheck`, `npm run build`.
+- auth через Next.js route handlers и HTTP-only cookies
+- backend proxy `/api/backend/*`
+- новый public catalog `/events`
+- новая карта `/events/map`
+- detail page с imported event states
+- demo promotion через `/api/v1/admin/events/{eventId}/make-demo-bookable`
+- booking flow для `demo_bookable` без замены SeatMap/Hold/Checkout/Payment core
 
-Все перечисленные проверки проходят, блокирующих несовпадений не найдено.
+## DTO и contract compatibility
 
-## Реально используемые endpoint-ы
+Frontend по-прежнему понимает оба стиля именования:
 
-Auth:
+- `posterUrl` и `poster_url`
+- `sourceUrl` и `source_url`
+- `startsAt` и `starts_at`
+- `endsAt` и `ends_at`
+- `bookingMode` и `booking_mode`
+- `externalSource` и `external_source`
+- `eventId` и `event_id`
+- `hallId` и `hall_id`
+- `isBookable` и `is_bookable`
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET /api/v1/auth/me`
+Основная нормализация находится в `frontend/src/shared/api/mappers.ts`.
 
-Каталог и сеансы:
+## External providers
 
-- `GET /api/v1/events`
-- `GET /api/v1/events/{eventId}`
-- `GET /api/v1/events/{eventId}/sessions`
-- `GET /api/v1/sessions/{sessionId}`
-- `GET /api/v1/sessions/{sessionId}/seats`
+### KudaGo
 
-Брони:
+- только `location=msk`
+- используется полная пагинация по `next`
+- импортируются future и ongoing events
+- при наличии expanded `place` сохраняются venue name, address и coords
 
-- `POST /api/v1/bookings/hold`
-- `GET /api/v1/bookings/{bookingId}`
-- `GET /api/v1/bookings/me`
-- `POST /api/v1/bookings/{bookingId}/cancel`
+### Timepad
 
-Платежи:
+- только `cities=Москва`
+- используется полная пагинация по `skip + limit`
+- сохраняются только события с физическим Moscow location
+- online-only events без московского адреса отбрасываются
 
-- `POST /api/v1/payments`
-- `GET /api/v1/payments/{paymentId}`
+## Dedupe strategy
 
-Уведомления:
+Идемпотентность sync строится в два слоя:
 
-- `GET /api/v1/notifications`
-- `POST /api/v1/notifications/{id}/read`
+1. exact duplicate: `events.external_source + events.external_id`
+2. soft duplicate: `dedupe_key = normalized_title + date + venue`
 
-## Какие DTO были адаптированы
+Если одно и то же событие пришло из разных провайдеров:
 
-- `frontend/src/shared/api/mappers.ts`:
-  - Поддержка и `camelCase`, и `snake_case` для ключевых сущностей (`event`, `session`, `seat map`, `booking`, `payment`, `notification`).
-  - Добавлен `normalizeHoldSeatResponse()` для нормализации ответа `POST /bookings/hold` и выравнивания полей `bookingId/expiresAt/totalPrice/seat`.
-- `frontend/src/shared/api/bookings.api.ts`:
-  - `holdSeat()` теперь использует mapper (`normalizeHoldSeatResponse`) вместо предположения о «идеальном» формате payload.
+- новый canonical event не создаётся
+- в `event_external_links` добавляется связь на второй provider id
+- детальная страница показывает merged links
 
-## Backend assumptions
+## Imported sessions
 
-- Все бизнес-endpoint-ы доступны под префиксом `/api/v1`.
-- Защищённые route-ы backend требуют `Authorization: Bearer <accessToken>`.
-- Refresh делается через `POST /auth/refresh` с телом `{ refreshToken }`.
-- 409 в сценарии удержания места возвращается в формате API-ошибки и обрабатывается фронтом через единый `friendlyApiError`.
-- Идемпотентность платежей обеспечивается backend (`idempotencyKey`) и может возвращать `409 IDEMPOTENCY_CONFLICT`.
-- Уведомления появляются асинхронно (через worker + outbox + Kafka), поэтому возможна естественная задержка между действием пользователя и появлением уведомления.
+Imported occurrences хранятся как `sessions` с:
 
-## Что отложено на v2
+- `hall_id = NULL`
+- `is_bookable = false`
 
-- Расширить DTO брони данными для UX (название события, зал, читаемое время сеанса) прямо в `GET /bookings/*`, чтобы убрать зависимость от fallback-полей в UI.
-- Добавить endpoint со сводкой непрочитанных уведомлений (например, `GET /notifications/unread-count`) для более дешёвого обновления индикатора в header.
-- Добавить интеграционные e2e-тесты фронта против живого backend в CI (с поднятием полного окружения), чтобы автоматически проверять пользовательские сценарии целиком.
+Это позволяет:
+
+- показывать расписание imported event
+- не ломать существующий booking core
+- не создавать лишние seat inventories до promo в demo booking
+
+## Demo promotion
+
+`make-demo-bookable`:
+
+- переиспользует existing imported event
+- создаёт или переиспользует venue
+- создаёт hall `Demo Hall`
+- создаёт rows `A-D`
+- создаёт 10 seats на ряд
+- создаёт `session_seats`
+- переводит event в `booking_mode=demo_bookable`
+- делает сессию bookable без переписывания existing booking logic
+
+## Worker and outbox
+
+- worker запускает `MoscowEventsSyncJob`, если `EXTERNAL_SYNC_ENABLED=true`
+- failure одного provider не валит весь worker
+- успешный run пишет outbox event `external_events.synced`
+- существующие Kafka/outbox сценарии бронирования не менялись
+
+## Ограничения
+
+- imported external events являются discovery-данными, а не реальными ticket sales
+- canonical source badge в каталоге один, дополнительные provider links отображаются на detail page
+- future sources пока не подключены

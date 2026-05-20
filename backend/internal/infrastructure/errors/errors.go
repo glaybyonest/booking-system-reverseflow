@@ -12,6 +12,7 @@ const (
 	CodeNotFound                = "NOT_FOUND"
 	CodeSeatNotAvailable        = "SEAT_NOT_AVAILABLE"
 	CodeSeatAlreadyHeld         = "SEAT_ALREADY_HELD"
+	CodeSessionNotBookable      = "SESSION_NOT_BOOKABLE"
 	CodeBookingNotFound         = "BOOKING_NOT_FOUND"
 	CodeBookingExpired          = "BOOKING_EXPIRED"
 	CodeBookingNotPending       = "BOOKING_NOT_PENDING"

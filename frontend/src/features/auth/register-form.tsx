@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Lock, Mail, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -32,42 +33,81 @@ export function RegisterForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {register.error ? <Alert variant="error">{friendlyApiError(register.error)}</Alert> : null}
-      <label className="block space-y-2 text-sm font-medium">
-        <span>Имя</span>
-        <Input autoComplete="name" {...form.register("name")} />
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-ink">Имя</label>
+        <div className="relative">
+          <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute-2" />
+          <Input
+            autoComplete="name"
+            placeholder="Иван Иванов"
+            className="pl-10"
+            {...form.register("name")}
+          />
+        </div>
         {form.formState.errors.name ? (
-          <span className="text-xs text-red-600">{form.formState.errors.name.message}</span>
+          <p className="text-xs text-err">{form.formState.errors.name.message}</p>
         ) : null}
-      </label>
-      <label className="block space-y-2 text-sm font-medium">
-        <span>Email</span>
-        <Input type="email" autoComplete="email" {...form.register("email")} />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-ink">Email</label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute-2" />
+          <Input
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            className="pl-10"
+            {...form.register("email")}
+          />
+        </div>
         {form.formState.errors.email ? (
-          <span className="text-xs text-red-600">{form.formState.errors.email.message}</span>
+          <p className="text-xs text-err">{form.formState.errors.email.message}</p>
         ) : null}
-      </label>
-      <label className="block space-y-2 text-sm font-medium">
-        <span>Пароль</span>
-        <Input type="password" autoComplete="new-password" {...form.register("password")} />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-ink">Пароль</label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute-2" />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            className="pl-10"
+            {...form.register("password")}
+          />
+        </div>
         {form.formState.errors.password ? (
-          <span className="text-xs text-red-600">{form.formState.errors.password.message}</span>
+          <p className="text-xs text-err">{form.formState.errors.password.message}</p>
         ) : null}
-      </label>
-      <label className="block space-y-2 text-sm font-medium">
-        <span>Повторите пароль</span>
-        <Input type="password" autoComplete="new-password" {...form.register("confirmPassword")} />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-ink">Повторите пароль</label>
+        <div className="relative">
+          <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute-2" />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            placeholder="••••••••"
+            className="pl-10"
+            {...form.register("confirmPassword")}
+          />
+        </div>
         {form.formState.errors.confirmPassword ? (
-          <span className="text-xs text-red-600">
-            {form.formState.errors.confirmPassword.message}
-          </span>
+          <p className="text-xs text-err">{form.formState.errors.confirmPassword.message}</p>
         ) : null}
-      </label>
+      </div>
+
       <Button className="w-full" size="lg" type="submit" disabled={register.isPending}>
-        {register.isPending ? "Создаем аккаунт..." : "Зарегистрироваться"}
+        {register.isPending ? "Создаём аккаунт..." : "Зарегистрироваться →"}
       </Button>
-      <p className="text-center text-sm text-gray-500">
+
+      <p className="text-center text-sm text-mute">
         Уже есть аккаунт?{" "}
-        <Link className="font-semibold text-gray-900 hover:underline" href="/login">
+        <Link className="font-semibold text-ink hover:underline" href="/login">
           Войти
         </Link>
       </p>

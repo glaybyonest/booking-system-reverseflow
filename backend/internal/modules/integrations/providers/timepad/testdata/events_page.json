@@ -1,0 +1,41 @@
+{
+  "total": 1,
+  "values": [
+    {
+      "id": 54321,
+      "name": "Лекция в Москве",
+      "description_short": "Короткое описание",
+      "description_html": "<p>Полное <strong>описание</strong></p>",
+      "url": "https://timepad.ru/event/54321/",
+      "starts_at": "2030-01-01T18:00:00+03:00",
+      "ends_at": "2030-01-01T20:00:00+03:00",
+      "age_limit": "12+",
+      "poster_image": {
+        "default_url": "https://images.example.com/timepad-lecture.jpg"
+      },
+      "categories": [
+        {
+          "name": "Образование"
+        }
+      ],
+      "ticket_types": [
+        {
+          "name": "Стандарт",
+          "price": 900
+        }
+      ],
+      "organization": {
+        "name": "Организатор"
+      },
+      "location": {
+        "name": "Лекторий на Тверской",
+        "address": "Москва, Тверская улица, 7",
+        "city": "Москва",
+        "coordinates": {
+          "lat": 55.757,
+          "lon": 37.615
+        }
+      }
+    }
+  ]
+}

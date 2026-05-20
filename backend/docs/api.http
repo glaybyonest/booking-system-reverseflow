@@ -1,5 +1,5 @@
 ### Login demo user
-POST http://localhost:8080/api/v1/auth/login
+POST http://localhost:18080/api/v1/auth/login
 Content-Type: application/json
 
 {
@@ -8,7 +8,7 @@ Content-Type: application/json
 }
 
 ### Events
-GET http://localhost:8080/api/v1/events
+GET http://localhost:18080/api/v1/events
 
 ### Seat map
-GET http://localhost:8080/api/v1/sessions/50000000-0000-0000-0000-000000000001/seats
+GET http://localhost:18080/api/v1/sessions/50000000-0000-0000-0000-000000000001/seats

@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 
 import type { Seat as SeatModel } from "@/entities/seat/types";
 import { cn } from "@/shared/lib/cn";
+import { seatStatusLabels } from "@/shared/lib/labels";
 
 export function Seat({
   seat,
@@ -16,7 +17,7 @@ export function Seat({
   return (
     <button
       type="button"
-      aria-label={`Seat ${seat.row}${seat.number}, ${seat.status}`}
+      aria-label={`Место ${seat.row}${seat.number}, ${seatStatusLabels[seat.status]}`}
       disabled={disabled}
       title={seat.status === "held" ? "Временно удерживается" : undefined}
       onClick={onSelect}

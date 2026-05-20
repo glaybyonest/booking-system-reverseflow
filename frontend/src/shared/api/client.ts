@@ -45,7 +45,7 @@ export function toApiError(status: number, payload: unknown) {
   }
   return new AppApiError({
     code: status === 401 ? "UNAUTHORIZED" : "INTERNAL_ERROR",
-    message: "Request failed",
+    message: "Запрос не выполнен",
     status
   });
 }

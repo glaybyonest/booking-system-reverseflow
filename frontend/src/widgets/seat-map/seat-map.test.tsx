@@ -17,11 +17,11 @@ describe("SeatMap", () => {
     const onSelect = vi.fn();
     render(<SeatMap seats={seats} onSelectSeat={onSelect} />);
 
-    expect(screen.getByLabelText("Seat A1, available")).toBeEnabled();
-    expect(screen.getByLabelText("Seat A2, held")).toBeDisabled();
-    expect(screen.getByLabelText("Seat A3, booked")).toBeDisabled();
+    expect(screen.getByLabelText("Место A1, свободно")).toBeEnabled();
+    expect(screen.getByLabelText("Место A2, удерживается")).toBeDisabled();
+    expect(screen.getByLabelText("Место A3, занято")).toBeDisabled();
 
-    await userEvent.click(screen.getByLabelText("Seat A1, available"));
+    await userEvent.click(screen.getByLabelText("Место A1, свободно"));
     expect(onSelect).toHaveBeenCalledWith(seats[0]);
   });
 });

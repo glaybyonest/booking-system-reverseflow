@@ -6,7 +6,7 @@ import { Providers } from "@/app/providers";
 
 export const metadata: Metadata = {
   title: "ReserveFlow",
-  description: "Бронирование мест на мероприятия быстро и безопасно."
+  description: "Сервис бронирования билетов и мест для российского рынка событий."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

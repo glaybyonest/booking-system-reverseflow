@@ -7,7 +7,8 @@ import { cancelBooking, getMyBookings } from "@/shared/api/bookings.api";
 export function useMyBookings() {
   return useQuery({
     queryKey: ["bookings", "me"],
-    queryFn: getMyBookings
+    queryFn: getMyBookings,
+    retry: false
   });
 }
 

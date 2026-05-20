@@ -28,6 +28,16 @@ frontend/*.tsbuildinfo
 # Go
 backend/bin/
 backend/coverage.out
+backend/.gocache/
+backend/.gomodcache/
+backend/seed-afisha.exe
+backend/*.exe
+
+# Raw data / seed files
+results/
+
+# Claude Code session data
+.claude/
 
 # Temp
 tmp/

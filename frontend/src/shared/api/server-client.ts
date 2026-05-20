@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { backendApiUrl } from "@/shared/config/env";
+import { resolveBackendApiUrl } from "@/shared/config/env";
 
 export async function serverFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   const token = (await cookies()).get("access_token")?.value;
@@ -8,7 +8,8 @@ export async function serverFetch<T>(path: string, options: RequestInit = {}): P
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(`${backendApiUrl()}/api/v1/${path.replace(/^\/+/, "")}`, {
+  const backendApiUrl = await resolveBackendApiUrl();
+  const response = await fetch(`${backendApiUrl}/api/v1/${path.replace(/^\/+/, "")}`, {
     ...options,
     headers,
     cache: "no-store"

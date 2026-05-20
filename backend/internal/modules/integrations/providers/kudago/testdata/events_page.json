@@ -1,0 +1,38 @@
+{
+  "count": 1,
+  "next": null,
+  "results": [
+    {
+      "id": 12345,
+      "title": "Концерт в Москве",
+      "description": "Большой концерт в Доме музыки",
+      "body_text": "",
+      "categories": ["concert"],
+      "age_restriction": "16+",
+      "price": "от 1200 руб.",
+      "is_free": false,
+      "site_url": "https://kudago.com/msk/event/kontsert-v-moskve/",
+      "images": [
+        {
+          "image": "https://images.example.com/kudago-concert.jpg"
+        }
+      ],
+      "place": {
+        "id": 678,
+        "title": "Московский международный дом музыки",
+        "address": "Космодамианская набережная, 52",
+        "site_url": "https://kudago.com/msk/place/dom-muzyki/",
+        "coords": {
+          "lat": 55.7343,
+          "lon": 37.6467
+        }
+      },
+      "dates": [
+        {
+          "start": 1893456000,
+          "end": 1893463200
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { backendApiUrl } from "@/shared/config/env";
+import { backendUnavailablePayload, resolveBackendApiUrl } from "@/shared/config/env";
 import { clearAuthCookies, extractTokens, setAuthCookies } from "@/app/api/auth/_cookies";
 
 export async function backendJSON(path: string, init: RequestInit = {}) {
@@ -9,13 +9,27 @@ export async function backendJSON(path: string, init: RequestInit = {}) {
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${backendApiUrl()}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store"
-  });
-  const payload = await response.json().catch(() => null);
-  return { response, payload };
+  try {
+    const backendApiUrl = await resolveBackendApiUrl();
+    const response = await fetch(`${backendApiUrl}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store"
+    });
+    const payload = await response.json().catch(() => null);
+    return { response, payload };
+  } catch (error) {
+    const payload = backendUnavailablePayload(error);
+    return {
+      response: new Response(JSON.stringify(payload), {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }),
+      payload
+    };
+  }
 }
 
 export async function refreshTokens() {

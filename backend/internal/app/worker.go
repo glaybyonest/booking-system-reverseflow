@@ -14,11 +14,17 @@ import (
 
 func RunWorker(ctx context.Context, deps *Dependencies) error {
 	deps.Log.Info().Msg("backend-worker starting")
+	if err := infrakafka.EnsureTopics(ctx, deps.Config.KafkaBrokers, infrakafka.DomainTopics); err != nil {
+		deps.Log.Warn().Err(err).Msg("kafka topic initialization failed; outbox publisher will retry")
+	} else {
+		deps.Log.Info().Strs("topics", infrakafka.DomainTopics).Msg("kafka topics ready")
+	}
 	go expirationLoop(ctx, deps)
 	go outboxLoop(ctx, deps)
-	for _, topic := range []string{"booking.confirmed", "booking.expired", "payment.failed", "booking.cancelled"} {
+	for _, topic := range infrakafka.NotificationTopics {
 		go notificationConsumerLoop(ctx, deps, topic)
 	}
+
 	<-ctx.Done()
 	deps.Log.Info().Msg("backend-worker stopped")
 	return ctx.Err()
@@ -164,6 +170,7 @@ func notificationConsumerLoop(ctx context.Context, deps *Dependencies, topic str
 		}
 	}
 }
+
 
 func handleNotificationMessage(ctx context.Context, deps *Dependencies, msg kafka.Message) error {
 	var envelope infrakafka.EventEnvelope

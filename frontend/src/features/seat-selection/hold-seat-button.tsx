@@ -11,7 +11,7 @@ export function HoldSeatButton({
 }) {
   return (
     <Button className="w-full" size="lg" type="submit" disabled={disabled || pending}>
-      {pending ? "Удерживаем..." : "Удержать место"}
+      {pending ? "Удерживаем билеты..." : "Забронировать билеты"}
       <ArrowRight className="h-4 w-4" />
     </Button>
   );

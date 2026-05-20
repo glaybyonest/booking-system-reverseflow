@@ -61,12 +61,11 @@ func (r *PostgresRepository) ProcessMockPayment(ctx context.Context, userID, boo
 		return nil, bookingdomain.ErrBookingExpired
 	}
 
-	var seatID string
-	if err := tx.QueryRow(ctx, `SELECT seat_id FROM booking_items WHERE booking_id = $1 LIMIT 1 FOR UPDATE`, bookingID).Scan(&seatID); err != nil {
+	seatIDs, err := lockBookingItems(ctx, tx, bookingID)
+	if err != nil {
 		return nil, err
 	}
-	var sessionSeatID string
-	if err := tx.QueryRow(ctx, `SELECT id FROM session_seats WHERE session_id = $1 AND seat_id = $2 FOR UPDATE`, sessionID, seatID).Scan(&sessionSeatID); err != nil {
+	if err := lockSessionSeats(ctx, tx, sessionID, seatIDs); err != nil {
 		return nil, err
 	}
 
@@ -108,11 +107,11 @@ func (r *PostgresRepository) ProcessMockPayment(ctx context.Context, userID, boo
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE session_seats SET status = 'booked', hold_expires_at = NULL, version = version + 1, updated_at = $3
-			WHERE session_id = $1 AND seat_id = $2
-		`, sessionID, seatID, now); err != nil {
+			WHERE session_id = $1 AND seat_id = ANY($2::uuid[])
+		`, sessionID, seatIDs, now); err != nil {
 			return nil, err
 		}
-		payload := map[string]any{"userId": userID, "bookingId": bookingID, "paymentId": paymentID, "sessionId": sessionID, "seatId": seatID}
+		payload := map[string]any{"userId": userID, "bookingId": bookingID, "paymentId": paymentID, "sessionId": sessionID, "seatIds": seatIDs}
 		if err := insertOutbox(ctx, tx, "payment.succeeded", "payment", paymentID, payload); err != nil {
 			return nil, err
 		}
@@ -131,11 +130,11 @@ func (r *PostgresRepository) ProcessMockPayment(ctx context.Context, userID, boo
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE session_seats SET status = 'available', hold_expires_at = NULL, version = version + 1, updated_at = $3
-			WHERE session_id = $1 AND seat_id = $2
-		`, sessionID, seatID, now); err != nil {
+			WHERE session_id = $1 AND seat_id = ANY($2::uuid[])
+		`, sessionID, seatIDs, now); err != nil {
 			return nil, err
 		}
-		payload := map[string]any{"userId": userID, "bookingId": bookingID, "paymentId": paymentID, "sessionId": sessionID, "seatId": seatID}
+		payload := map[string]any{"userId": userID, "bookingId": bookingID, "paymentId": paymentID, "sessionId": sessionID, "seatIds": seatIDs}
 		if err := insertOutbox(ctx, tx, "payment.failed", "payment", paymentID, payload); err != nil {
 			return nil, err
 		}
@@ -156,7 +155,7 @@ func (r *PostgresRepository) ProcessMockPayment(ctx context.Context, userID, boo
 			UpdatedAt:      now,
 		},
 		SessionID: sessionID,
-		SeatID:    seatID,
+		SeatIDs:   seatIDs,
 	}, nil
 }
 
@@ -205,4 +204,53 @@ func insertOutbox(ctx context.Context, tx pgx.Tx, eventType, aggregateType, aggr
 
 func rollback(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
+}
+
+func lockBookingItems(ctx context.Context, tx pgx.Tx, bookingID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT seat_id
+		FROM booking_items
+		WHERE booking_id = $1
+		ORDER BY seat_id
+		FOR UPDATE
+	`, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seatIDs := make([]string, 0)
+	for rows.Next() {
+		var seatID string
+		if err := rows.Scan(&seatID); err != nil {
+			return nil, err
+		}
+		seatIDs = append(seatIDs, seatID)
+	}
+	return seatIDs, rows.Err()
+}
+
+func lockSessionSeats(ctx context.Context, tx pgx.Tx, sessionID string, seatIDs []string) error {
+	rows, err := tx.Query(ctx, `
+		SELECT id
+		FROM session_seats
+		WHERE session_id = $1 AND seat_id = ANY($2::uuid[])
+		FOR UPDATE
+	`, sessionID, seatIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if count != len(seatIDs) {
+		return bookingdomain.ErrSeatNotFound
+	}
+	return nil
 }

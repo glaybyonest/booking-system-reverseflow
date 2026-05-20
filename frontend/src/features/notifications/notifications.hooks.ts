@@ -8,6 +8,7 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications"],
     queryFn: getNotifications,
+    retry: false,
     refetchInterval: 15000
   });
 }

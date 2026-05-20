@@ -28,6 +28,7 @@ func (h *Handler) Routes(r chi.Router, authMiddleware func(http.Handler) http.Ha
 type holdRequest struct {
 	SessionID string `json:"sessionId"`
 	SeatID    string `json:"seatId"`
+	SeatIDs   []string `json:"seatIds"`
 }
 
 func (h *Handler) hold(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +37,11 @@ func (h *Handler) hold(w http.ResponseWriter, r *http.Request) {
 		middleware.Error(w, err)
 		return
 	}
-	result, err := h.service.HoldSeat(r.Context(), middleware.UserIDFromContext(r.Context()), req.SessionID, req.SeatID)
+	seatIDs := req.SeatIDs
+	if len(seatIDs) == 0 && req.SeatID != "" {
+		seatIDs = []string{req.SeatID}
+	}
+	result, err := h.service.HoldSeats(r.Context(), middleware.UserIDFromContext(r.Context()), req.SessionID, seatIDs)
 	if err != nil {
 		middleware.Error(w, err)
 		return

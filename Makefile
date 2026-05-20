@@ -1,11 +1,14 @@
 COMPOSE_FILE=deploy/docker/docker-compose.yml
-ENV_FILE=.env.example
+ENV_FILE?=$(if $(wildcard .env),.env,.env.example)
 DATABASE_URL?=postgres://reserveflow:reserveflow@localhost:5432/reserveflow?sslmode=disable
 
-.PHONY: up down logs api worker frontend frontend-build frontend-lint frontend-typecheck migrate-up migrate-down seed test test-integration lint docker-build
+.PHONY: up dev-up down logs api worker frontend frontend-build frontend-lint frontend-typecheck migrate-up migrate-down seed test test-integration lint docker-build
 
 up:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --build
+
+dev-up:
+	powershell -ExecutionPolicy Bypass -File scripts/dev-up.ps1
 
 down:
 	docker compose -f $(COMPOSE_FILE) down
@@ -38,7 +41,7 @@ migrate-down:
 	migrate -path backend/migrations -database "$(DATABASE_URL)" down 1
 
 seed:
-	psql "$(DATABASE_URL)" -f backend/migrations/000002_seed.up.sql
+	psql "$(DATABASE_URL)" -f backend/seeds/dev-users.sql
 
 test:
 	cd backend && go test ./...

@@ -46,6 +46,11 @@ func NewRouter(deps *Dependencies) http.Handler {
 		deps.BookingsHandler.Routes(api, authMiddleware)
 		deps.PaymentsHandler.Routes(api, authMiddleware)
 		deps.NotificationsHandler.Routes(api, authMiddleware)
+		api.Route("/admin", func(admin chi.Router) {
+			admin.Use(authMiddleware)
+			admin.Use(middleware.RequireAdmin)
+			deps.IntegrationsHandler.Routes(admin)
+		})
 	})
 	return r
 }

@@ -8,20 +8,20 @@ import (
 )
 
 type Config struct {
-	AppEnv           string
-	HTTPPort         string
-	DatabaseURL      string
-	RedisAddr        string
-	RedisPassword    string
-	RedisDB          int
-	KafkaBrokers     []string
-	JWTAccessSecret  string
+	AppEnv          string
+	HTTPPort        string
+	DatabaseURL     string
+	RedisAddr       string
+	RedisPassword   string
+	RedisDB         int
+	KafkaBrokers    []string
+	JWTAccessSecret string
 	JWTRefreshSecret string
-	JWTAccessTTL     time.Duration
-	JWTRefreshTTL    time.Duration
-	HoldTTL          time.Duration
-	SeatmapCacheTTL  time.Duration
-	LogLevel         string
+	JWTAccessTTL    time.Duration
+	JWTRefreshTTL   time.Duration
+	HoldTTL         time.Duration
+	SeatmapCacheTTL time.Duration
+	LogLevel        string
 }
 
 func LoadConfig() (Config, error) {
@@ -82,3 +82,4 @@ func splitCSV(value string) []string {
 	}
 	return out
 }
+

@@ -1,23 +1,38 @@
-import { EventDetails } from "@/widgets/event-details/event-details";
-import { Header } from "@/widgets/header/header";
-import { SessionList } from "@/features/session-list/session-list";
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 
-export default function EventDetailsPage({ params }: { params: { eventId: string } }) {
+import { EventBreadcrumb } from "@/features/event-list/event-breadcrumb";
+import { EventDetails } from "@/widgets/event-details/event-details";
+import { Footer } from "@/widgets/footer/footer";
+import { Header } from "@/widgets/header/header";
+import { parseEventRouteId } from "@/shared/lib/url";
+
+type EventDetailsPageProps = {
+  params: Promise<{
+    eventId: string;
+  }>;
+};
+
+export default async function EventDetailsPage({ params }: EventDetailsPageProps) {
+  const { eventId } = await params;
+  const normalizedEventId = parseEventRouteId(eventId);
+
   return (
-    <div className="min-h-screen bg-[#F8F9FA]">
+    <div className="flex min-h-screen flex-col bg-bg">
       <Header variant="auto" />
-      <main className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-12">
-        <section className="lg:col-span-7">
-          <EventDetails eventId={params.eventId} />
-        </section>
-        <section className="lg:col-span-5">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold">Сеансы</h2>
-            <p className="mt-1 text-sm text-gray-500">Выберите удобное время и переходите к местам.</p>
-          </div>
-          <SessionList eventId={params.eventId} />
-        </section>
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">
+        <nav className="mb-6 flex items-center gap-1.5 text-xs text-mute">
+          <Link href="/events" className="transition-colors hover:text-ink">
+            Мероприятия
+          </Link>
+          <ChevronRight className="h-3 w-3" />
+          <EventBreadcrumb eventId={normalizedEventId} />
+          <ChevronRight className="h-3 w-3" />
+          <span className="font-medium text-ink">Подробности</span>
+        </nav>
+        <EventDetails eventId={normalizedEventId} />
       </main>
+      <Footer />
     </div>
   );
 }

@@ -21,15 +21,12 @@ import (
 	"reserveflow/backend/internal/app"
 )
 
-const (
-	seedEventID   = "40000000-0000-0000-0000-000000000001"
-	seedSessionID = "50000000-0000-0000-0000-000000000001"
-)
-
 func TestAPIAuthCatalogSeatMapFlow(t *testing.T) {
 	ctx := context.Background()
-	server, cleanup := newIntegrationServer(t, ctx)
+	server, deps, cleanup := newIntegrationServerWithDeps(t, ctx)
 	defer cleanup()
+
+	fixture := seedBookableKudaGoEvent(t, ctx, deps.DB, "API flow concert")
 
 	var register authResponse
 	doJSON(t, http.MethodPost, server.URL+"/api/v1/auth/register", "", map[string]any{
@@ -41,47 +38,58 @@ func TestAPIAuthCatalogSeatMapFlow(t *testing.T) {
 	require.NotEmpty(t, register.Tokens.AccessToken)
 	require.NotEmpty(t, register.Tokens.RefreshToken)
 
-	var login authResponse
-	doJSON(t, http.MethodPost, server.URL+"/api/v1/auth/login", "", map[string]any{
-		"email":    "demo@example.com",
-		"password": "Password123!",
-	}, http.StatusOK, &login)
-	require.Equal(t, "demo@example.com", login.User.Email)
-	require.NotEmpty(t, login.Tokens.AccessToken)
+	demo := loginDemo(t, server.URL)
 
 	var me userResponse
-	doJSON(t, http.MethodGet, server.URL+"/api/v1/auth/me", login.Tokens.AccessToken, nil, http.StatusOK, &me)
+	doJSON(t, http.MethodGet, server.URL+"/api/v1/auth/me", demo.Tokens.AccessToken, nil, http.StatusOK, &me)
 	require.Equal(t, "demo@example.com", me.Email)
 
 	var events listResponse[eventResponse]
 	doJSON(t, http.MethodGet, server.URL+"/api/v1/events", "", nil, http.StatusOK, &events)
-	require.Len(t, events.Items, 3)
+	require.Len(t, events.Items, 1)
+	require.Equal(t, fixture.EventID, events.Items[0].ID)
+	require.Equal(t, "kudago", events.Items[0].Source)
+	require.Equal(t, "reserveflow_managed", events.Items[0].BookingMode)
 
 	var sessions listResponse[sessionResponse]
-	doJSON(t, http.MethodGet, server.URL+"/api/v1/events/"+seedEventID+"/sessions", "", nil, http.StatusOK, &sessions)
-	require.NotEmpty(t, sessions.Items)
+	doJSON(t, http.MethodGet, server.URL+"/api/v1/events/"+fixture.EventID+"/sessions", "", nil, http.StatusOK, &sessions)
+	require.Len(t, sessions.Items, 1)
+	require.Equal(t, fixture.SessionID, sessions.Items[0].ID)
+	require.True(t, sessions.Items[0].IsBookable)
 
 	var session sessionResponse
-	doJSON(t, http.MethodGet, server.URL+"/api/v1/sessions/"+seedSessionID, "", nil, http.StatusOK, &session)
-	require.Equal(t, seedSessionID, session.ID)
+	doJSON(t, http.MethodGet, server.URL+"/api/v1/sessions/"+fixture.SessionID, "", nil, http.StatusOK, &session)
+	require.Equal(t, fixture.SessionID, session.ID)
+	require.Equal(t, fixture.EventID, session.EventID)
 
 	var seatMap seatMapResponse
-	doJSON(t, http.MethodGet, server.URL+"/api/v1/sessions/"+seedSessionID+"/seats", "", nil, http.StatusOK, &seatMap)
-	require.Equal(t, seedSessionID, seatMap.SessionID)
-	require.Len(t, seatMap.Seats, 40)
+	doJSON(t, http.MethodGet, server.URL+"/api/v1/sessions/"+fixture.SessionID+"/seats", "", nil, http.StatusOK, &seatMap)
+	require.Equal(t, fixture.SessionID, seatMap.SessionID)
+	require.Equal(t, "react_seat_toolkit", seatMap.Provider)
+	require.NotNil(t, seatMap.Layout)
+	require.Len(t, seatMap.Seats, len(fixture.Layout.Seats))
 	require.Equal(t, "available", seatMap.Seats[0].Status)
 }
 
-func TestAPIPaymentSuccessFailureIdempotencyAndOwnership(t *testing.T) {
+func TestAPIMultiSeatPaymentSuccessFailureIdempotencyAndOwnership(t *testing.T) {
 	ctx := context.Background()
-	server, cleanup := newIntegrationServer(t, ctx)
+	server, deps, cleanup := newIntegrationServerWithDeps(t, ctx)
 	defer cleanup()
 
+	fixture := seedBookableKudaGoEvent(t, ctx, deps.DB, "Payment flow concert")
 	demo := loginDemo(t, server.URL)
-	seats := availableSeats(t, server.URL, seedSessionID)
-	require.GreaterOrEqual(t, len(seats), 2)
+	seats := availableSeats(t, server.URL, fixture.SessionID)
+	require.GreaterOrEqual(t, len(seats), 3)
 
-	firstHold := holdSeat(t, server.URL, demo.Tokens.AccessToken, seedSessionID, seats[0].SeatID)
+	firstHold := holdSeats(t, server.URL, demo.Tokens.AccessToken, fixture.SessionID, []string{seats[0].SeatID, seats[1].SeatID})
+	require.Len(t, firstHold.Seats, 2)
+	require.Positive(t, firstHold.TotalPrice)
+
+	var firstBooking bookingResponse
+	doJSON(t, http.MethodGet, server.URL+"/api/v1/bookings/"+firstHold.BookingID, demo.Tokens.AccessToken, nil, http.StatusOK, &firstBooking)
+	require.Equal(t, "pending", firstBooking.Status)
+	require.Len(t, firstBooking.Items, 2)
+
 	var success paymentResponse
 	doJSON(t, http.MethodPost, server.URL+"/api/v1/payments", demo.Tokens.AccessToken, map[string]any{
 		"bookingId":      firstHold.BookingID,
@@ -98,7 +106,7 @@ func TestAPIPaymentSuccessFailureIdempotencyAndOwnership(t *testing.T) {
 	}, http.StatusOK, &replay)
 	require.Equal(t, success.PaymentID, replay.PaymentID)
 
-	secondHold := holdSeat(t, server.URL, demo.Tokens.AccessToken, seedSessionID, seats[1].SeatID)
+	secondHold := holdSeat(t, server.URL, demo.Tokens.AccessToken, fixture.SessionID, seats[2].SeatID)
 	var idempotencyErr apiErrorResponse
 	doJSON(t, http.MethodPost, server.URL+"/api/v1/payments", demo.Tokens.AccessToken, map[string]any{
 		"bookingId":      secondHold.BookingID,
@@ -132,10 +140,12 @@ func TestAPIPaymentSuccessFailureIdempotencyAndOwnership(t *testing.T) {
 	var failedBooking bookingResponse
 	doJSON(t, http.MethodGet, server.URL+"/api/v1/bookings/"+secondHold.BookingID, demo.Tokens.AccessToken, nil, http.StatusOK, &failedBooking)
 	require.Equal(t, "payment_failed", failedBooking.Status)
+	require.Len(t, failedBooking.Items, 1)
 
-	seatMap := seatMap(t, server.URL, seedSessionID)
-	require.Equal(t, "available", statusForSeat(t, seatMap, seats[1].SeatID))
-	require.Equal(t, "booked", statusForSeat(t, seatMap, seats[0].SeatID))
+	latestSeatMap := seatMap(t, server.URL, fixture.SessionID)
+	require.Equal(t, "booked", statusForSeat(t, latestSeatMap, seats[0].SeatID))
+	require.Equal(t, "booked", statusForSeat(t, latestSeatMap, seats[1].SeatID))
+	require.Equal(t, "available", statusForSeat(t, latestSeatMap, seats[2].SeatID))
 }
 
 func TestExpirationReleasesPendingBooking(t *testing.T) {
@@ -143,30 +153,37 @@ func TestExpirationReleasesPendingBooking(t *testing.T) {
 	server, deps, cleanup := newIntegrationServerWithDeps(t, ctx)
 	defer cleanup()
 
+	fixture := seedBookableKudaGoEvent(t, ctx, deps.DB, "Expiration flow concert")
 	demo := loginDemo(t, server.URL)
-	seats := availableSeats(t, server.URL, seedSessionID)
-	hold := holdSeat(t, server.URL, demo.Tokens.AccessToken, seedSessionID, seats[0].SeatID)
+	seats := availableSeats(t, server.URL, fixture.SessionID)
+	require.GreaterOrEqual(t, len(seats), 2)
+
+	hold := holdSeats(t, server.URL, demo.Tokens.AccessToken, fixture.SessionID, []string{seats[0].SeatID, seats[1].SeatID})
 
 	_, err := deps.DB.Exec(ctx, `
 		UPDATE bookings SET expires_at = now() - interval '1 minute' WHERE id = $1
 	`, hold.BookingID)
 	require.NoError(t, err)
 	_, err = deps.DB.Exec(ctx, `
-		UPDATE session_seats SET hold_expires_at = now() - interval '1 minute' WHERE session_id = $1 AND seat_id = $2
-	`, seedSessionID, seats[0].SeatID)
+		UPDATE session_seats
+		SET hold_expires_at = now() - interval '1 minute'
+		WHERE session_id = $1 AND seat_id = ANY($2::uuid[])
+	`, fixture.SessionID, []string{seats[0].SeatID, seats[1].SeatID})
 	require.NoError(t, err)
 
 	changes, err := deps.BookingsService.ExpireBooking(ctx, 100)
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
 	require.Equal(t, hold.BookingID, changes[0].BookingID)
+	require.ElementsMatch(t, []string{seats[0].SeatID, seats[1].SeatID}, changes[0].SeatIDs)
 
 	var expired bookingResponse
 	doJSON(t, http.MethodGet, server.URL+"/api/v1/bookings/"+hold.BookingID, demo.Tokens.AccessToken, nil, http.StatusOK, &expired)
 	require.Equal(t, "expired", expired.Status)
 
-	seatMap := seatMap(t, server.URL, seedSessionID)
-	require.Equal(t, "available", statusForSeat(t, seatMap, seats[0].SeatID))
+	latestSeatMap := seatMap(t, server.URL, fixture.SessionID)
+	require.Equal(t, "available", statusForSeat(t, latestSeatMap, seats[0].SeatID))
+	require.Equal(t, "available", statusForSeat(t, latestSeatMap, seats[1].SeatID))
 }
 
 func newIntegrationServer(t *testing.T, ctx context.Context) (*httptest.Server, func()) {
@@ -178,8 +195,8 @@ func newIntegrationServer(t *testing.T, ctx context.Context) (*httptest.Server, 
 func newIntegrationServerWithDeps(t *testing.T, ctx context.Context) (*httptest.Server, *app.Dependencies, func()) {
 	t.Helper()
 	databaseURL, cleanupPostgres := startPostgres(t, ctx)
-	applySQL(t, ctx, databaseURL, filepath.Join("..", "migrations", "000001_init.up.sql"))
-	applySQL(t, ctx, databaseURL, filepath.Join("..", "migrations", "000002_seed.up.sql"))
+	applyIntegrationMigrations(t, ctx, databaseURL)
+	applySQL(t, ctx, databaseURL, filepath.Join("..", "seeds", "dev-users.sql"))
 
 	redisAddr, cleanupRedis := startRedis(t, ctx)
 	cfg := app.Config{
@@ -259,10 +276,15 @@ func seatMap(t *testing.T, baseURL, sessionID string) seatMapResponse {
 
 func holdSeat(t *testing.T, baseURL, token, sessionID, seatID string) holdResponse {
 	t.Helper()
+	return holdSeats(t, baseURL, token, sessionID, []string{seatID})
+}
+
+func holdSeats(t *testing.T, baseURL, token, sessionID string, seatIDs []string) holdResponse {
+	t.Helper()
 	var hold holdResponse
 	doJSON(t, http.MethodPost, baseURL+"/api/v1/bookings/hold", token, map[string]any{
 		"sessionId": sessionID,
-		"seatId":    seatID,
+		"seatIds":   seatIDs,
 	}, http.StatusCreated, &hold)
 	require.Equal(t, "pending", hold.Status)
 	return hold
@@ -324,36 +346,55 @@ type userResponse struct {
 
 type listResponse[T any] struct {
 	Items []T `json:"items"`
+	Total int `json:"total"`
 }
 
 type eventResponse struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	Source      string `json:"source"`
+	BookingMode string `json:"bookingMode"`
 }
 
 type sessionResponse struct {
-	ID      string `json:"id"`
-	EventID string `json:"eventId"`
-	HallID  string `json:"hallId"`
-	Status  string `json:"status"`
+	ID         string `json:"id"`
+	EventID    string `json:"eventId"`
+	HallID     string `json:"hallId"`
+	Status     string `json:"status"`
+	IsBookable bool   `json:"isBookable"`
 }
 
 type seatMapResponse struct {
-	SessionID string         `json:"sessionId"`
-	Seats     []seatResponse `json:"seats"`
+	SessionID string              `json:"sessionId"`
+	Provider  string              `json:"provider"`
+	Layout    *seatLayoutResponse `json:"layout"`
+	Seats     []seatResponse      `json:"seats"`
+}
+
+type seatLayoutResponse struct {
+	Version int `json:"version"`
 }
 
 type seatResponse struct {
-	SeatID string `json:"seatId"`
-	Row    string `json:"row"`
-	Number int    `json:"number"`
-	Status string `json:"status"`
+	SeatID string  `json:"seatId"`
+	Row    string  `json:"row"`
+	Number int     `json:"number"`
+	Status string  `json:"status"`
+	Price  float64 `json:"price"`
 }
 
 type holdResponse struct {
-	BookingID string `json:"bookingId"`
-	Status    string `json:"status"`
+	BookingID  string             `json:"bookingId"`
+	Status     string             `json:"status"`
+	TotalPrice float64            `json:"totalPrice"`
+	Seats      []heldSeatResponse `json:"seats"`
+}
+
+type heldSeatResponse struct {
+	SeatID string `json:"seatId"`
+	Row    string `json:"row"`
+	Number int    `json:"number"`
 }
 
 type paymentResponse struct {
@@ -363,8 +404,19 @@ type paymentResponse struct {
 }
 
 type bookingResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
+	ID         string                `json:"id"`
+	Status     string                `json:"status"`
+	TotalPrice float64               `json:"totalPrice"`
+	Items      []bookingItemResponse `json:"items"`
+}
+
+type bookingItemResponse struct {
+	ID     string  `json:"id"`
+	SeatID string  `json:"seatId"`
+	Row    string  `json:"row"`
+	Number int     `json:"number"`
+	Price  float64 `json:"price"`
+	Status string  `json:"status"`
 }
 
 type apiErrorResponse struct {

@@ -29,15 +29,13 @@ func TestConcurrentHoldAllowsOnlyOneWinner(t *testing.T) {
 	pool, err := db.NewPostgresPool(ctx, databaseURL)
 	require.NoError(t, err)
 	defer pool.Close()
-	applySQL(t, ctx, databaseURL, filepath.Join("..", "migrations", "000001_init.up.sql"))
-	applySQL(t, ctx, databaseURL, filepath.Join("..", "migrations", "000002_seed.up.sql"))
+	applyIntegrationMigrations(t, ctx, databaseURL)
+	applySQL(t, ctx, databaseURL, filepath.Join("..", "seeds", "dev-users.sql"))
 
 	const userID = "10000000-0000-0000-0000-000000000001"
-	const sessionID = "50000000-0000-0000-0000-000000000001"
-	var seatID string
-	require.NoError(t, pool.QueryRow(ctx, `
-		SELECT seat_id FROM session_seats WHERE session_id = $1 ORDER BY seat_id LIMIT 1
-	`, sessionID).Scan(&seatID))
+	fixture := seedBookableKudaGoEvent(t, ctx, pool, "Concurrency concert")
+	sessionID := fixture.SessionID
+	seatID := fixture.SeatIDs[0]
 
 	service := bookingsapp.NewService(bookingsrepo.NewPostgresRepository(pool), nil, 10*time.Minute, zerolog.Nop())
 
@@ -47,7 +45,7 @@ func TestConcurrentHoldAllowsOnlyOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := service.HoldSeat(ctx, userID, sessionID, seatID)
+			_, err := service.HoldSeats(ctx, userID, sessionID, []string{seatID})
 			results <- err
 		}()
 	}

@@ -15,7 +15,7 @@ import (
 )
 
 type Repository interface {
-	HoldSeat(ctx context.Context, userID, sessionID, seatID string, ttl time.Duration) (*HoldResult, error)
+	HoldSeats(ctx context.Context, userID, sessionID string, seatIDs []string, ttl time.Duration) (*HoldResult, error)
 	GetBooking(ctx context.Context, bookingID string) (*domain.Booking, error)
 	GetMyBookings(ctx context.Context, userID string) ([]domain.Booking, error)
 	CancelBooking(ctx context.Context, userID, bookingID string) (*SeatChange, error)
@@ -40,34 +40,42 @@ type HoldResult struct {
 	BookingID  string              `json:"bookingId"`
 	Status     string              `json:"status"`
 	ExpiresAt  time.Time           `json:"expiresAt"`
-	Seat       domain.SeatSnapshot `json:"seat"`
+	Seats      []domain.SeatSnapshot `json:"seats"`
 	TotalPrice float64             `json:"totalPrice"`
 	SessionID  string              `json:"-"`
 	UserID     string              `json:"-"`
+	SeatIDs    []string            `json:"-"`
 }
 
 type SeatChange struct {
 	BookingID string
 	UserID    string
 	SessionID string
-	SeatID    string
+	SeatIDs   []string
 }
 
 func NewService(repo Repository, cache Cache, holdTTL time.Duration, log zerolog.Logger) *Service {
 	return &Service{repo: repo, cache: cache, holdTTL: holdTTL, log: log}
 }
 
-func (s *Service) HoldSeat(ctx context.Context, userID, sessionID, seatID string) (*HoldResult, error) {
-	if userID == "" || sessionID == "" || seatID == "" {
-		return nil, apperrors.Validation("sessionId and seatId are required")
+func (s *Service) HoldSeats(ctx context.Context, userID, sessionID string, seatIDs []string) (*HoldResult, error) {
+	if userID == "" || sessionID == "" || len(seatIDs) == 0 {
+		return nil, apperrors.Validation("sessionId and seatIds are required")
 	}
-	result, err := s.repo.HoldSeat(ctx, userID, sessionID, seatID, s.holdTTL)
+	if len(seatIDs) > 4 {
+		return nil, apperrors.Validation("you can hold up to 4 seats at once")
+	}
+	uniqueSeatIDs := uniqueSeatIDs(seatIDs)
+	if len(uniqueSeatIDs) != len(seatIDs) {
+		return nil, apperrors.Validation("seatIds must be unique")
+	}
+	result, err := s.repo.HoldSeats(ctx, userID, sessionID, uniqueSeatIDs, s.holdTTL)
 	if err != nil {
 		observability.BookingHoldFailedTotal.Inc()
 		return nil, mapBookingError(err)
 	}
 	observability.BookingHoldTotal.Inc()
-	s.afterSeatChange(ctx, SeatChange{BookingID: result.BookingID, UserID: userID, SessionID: sessionID, SeatID: seatID}, true)
+	s.afterSeatChange(ctx, SeatChange{BookingID: result.BookingID, UserID: userID, SessionID: sessionID, SeatIDs: uniqueSeatIDs}, true)
 	return result, nil
 }
 
@@ -134,13 +142,15 @@ func (s *Service) afterSeatChange(ctx context.Context, change SeatChange, create
 	if s.cache == nil {
 		return
 	}
-	if createHoldKey {
-		if err := s.cache.Set(ctx, rediscache.HoldKey(change.SessionID, change.SeatID), change.UserID, s.holdTTL); err != nil {
-			s.log.Warn().Err(err).Str("session_id", change.SessionID).Str("seat_id", change.SeatID).Msg("failed to write redis hold key")
-		}
-	} else {
-		if err := s.cache.Del(ctx, rediscache.HoldKey(change.SessionID, change.SeatID)); err != nil {
-			s.log.Warn().Err(err).Str("session_id", change.SessionID).Str("seat_id", change.SeatID).Msg("failed to delete redis hold key")
+	for _, seatID := range change.SeatIDs {
+		if createHoldKey {
+			if err := s.cache.Set(ctx, rediscache.HoldKey(change.SessionID, seatID), change.UserID, s.holdTTL); err != nil {
+				s.log.Warn().Err(err).Str("session_id", change.SessionID).Str("seat_id", seatID).Msg("failed to write redis hold key")
+			}
+		} else {
+			if err := s.cache.Del(ctx, rediscache.HoldKey(change.SessionID, seatID)); err != nil {
+				s.log.Warn().Err(err).Str("session_id", change.SessionID).Str("seat_id", seatID).Msg("failed to delete redis hold key")
+			}
 		}
 	}
 	if err := s.cache.Del(ctx, rediscache.SeatmapKey(change.SessionID)); err != nil {
@@ -148,10 +158,25 @@ func (s *Service) afterSeatChange(ctx context.Context, change SeatChange, create
 	}
 }
 
+func uniqueSeatIDs(seatIDs []string) []string {
+	seen := make(map[string]struct{}, len(seatIDs))
+	items := make([]string, 0, len(seatIDs))
+	for _, seatID := range seatIDs {
+		if _, exists := seen[seatID]; exists {
+			continue
+		}
+		seen[seatID] = struct{}{}
+		items = append(items, seatID)
+	}
+	return items
+}
+
 func mapBookingError(err error) error {
 	switch {
 	case errors.Is(err, domain.ErrSeatNotFound):
 		return apperrors.New(apperrors.CodeNotFound, "Session seat not found", http.StatusNotFound)
+	case errors.Is(err, domain.ErrSessionNotBookable):
+		return apperrors.Conflict(apperrors.CodeSessionNotBookable, "Session is not available for booking")
 	case errors.Is(err, domain.ErrSeatNotAvailable):
 		return apperrors.Conflict(apperrors.CodeSeatNotAvailable, "Seat is not available")
 	case errors.Is(err, domain.ErrBookingNotFound):

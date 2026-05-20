@@ -25,21 +25,16 @@ export type Booking = {
   items?: BookingItem[];
   event?: Event;
   session?: Session;
-  seat?: {
-    seatId: string;
-    row: string;
-    number: number;
-  };
 };
 
 export type HoldSeatResponse = {
   bookingId: string;
   status: BookingStatus;
   expiresAt: string;
-  seat: {
+  seats: Array<{
     seatId: string;
     row: string;
     number: number;
-  };
+  }>;
   totalPrice: number;
 };

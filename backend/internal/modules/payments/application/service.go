@@ -29,7 +29,7 @@ type Cache interface {
 type PaymentResult struct {
 	Payment   paymentdomain.Payment
 	SessionID string
-	SeatID    string
+	SeatIDs   []string
 }
 
 type Service struct {
@@ -117,9 +117,11 @@ func (s *Service) afterPayment(ctx context.Context, result *PaymentResult, idemp
 			s.log.Warn().Err(err).Str("payment_id", result.Payment.ID).Msg("failed to write payment idempotency cache")
 		}
 	}
-	if result.SessionID != "" && result.SeatID != "" {
-		if err := s.cache.Del(ctx, rediscache.HoldKey(result.SessionID, result.SeatID)); err != nil {
-			s.log.Warn().Err(err).Str("session_id", result.SessionID).Str("seat_id", result.SeatID).Msg("failed to delete hold key after payment")
+	if result.SessionID != "" {
+		for _, seatID := range result.SeatIDs {
+			if err := s.cache.Del(ctx, rediscache.HoldKey(result.SessionID, seatID)); err != nil {
+				s.log.Warn().Err(err).Str("session_id", result.SessionID).Str("seat_id", seatID).Msg("failed to delete hold key after payment")
+			}
 		}
 	}
 	if result.SessionID != "" {

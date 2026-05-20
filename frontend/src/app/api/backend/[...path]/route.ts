@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-import { backendApiUrl } from "@/shared/config/env";
+import { backendUnavailablePayload, resolveBackendApiUrl } from "@/shared/config/env";
 import { refreshTokens } from "@/app/api/auth/_backend";
 import { setAuthCookies, type TokenPair } from "@/app/api/auth/_cookies";
 
@@ -36,14 +36,19 @@ async function proxy(request: NextRequest, context: Params) {
   const params = await context.params;
   const body =
     request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
-  const first = await forward(request, params.path, body, accessToken);
-  if (first.status !== 401) return first;
 
-  const tokens = await refreshTokens();
-  if (!tokens) return first;
+  try {
+    const first = await forward(request, params.path, body, accessToken);
+    if (first.status !== 401) return first;
 
-  const second = await forward(request, params.path, body, tokens.accessToken, tokens);
-  return second;
+    const tokens = await refreshTokens();
+    if (!tokens) return first;
+
+    const second = await forward(request, params.path, body, tokens.accessToken, tokens);
+    return second;
+  } catch (error) {
+    return NextResponse.json(backendUnavailablePayload(error), { status: 503 });
+  }
 }
 
 async function forward(
@@ -53,7 +58,8 @@ async function forward(
   accessToken?: string,
   refreshedTokens?: TokenPair
 ) {
-  const target = new URL(`${backendApiUrl()}/api/v1/${path.map(encodeURIComponent).join("/")}`);
+  const backendApiUrl = await resolveBackendApiUrl();
+  const target = new URL(`${backendApiUrl}/api/v1/${path.map(encodeURIComponent).join("/")}`);
   request.nextUrl.searchParams.forEach((value, key) => target.searchParams.append(key, value));
 
   const headers = new Headers();
